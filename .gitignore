@@ -1,0 +1,7 @@
+app/config.php
+storage/
+*.sqlite
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

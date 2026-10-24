@@ -1,0 +1,19 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # If app/ was uploaded inside the web root by mistake, never serve it.
+    RewriteRule ^(app|storage|scripts)(/|$) - [F,L]
+
+    # Send everything that isn't a real file to index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "same-origin"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
