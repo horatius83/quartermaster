@@ -55,6 +55,22 @@ php -S localhost:8000 -t public scripts/dev-router.php
 
 Open http://localhost:8000. The demo logins are `dm` / `dungeon123` and players `bryn`, `tamsin`, `oskar`, `wren` / `adventure`. The seed script also works against MySQL, but only on an empty database.
 
+## End-to-end tests
+
+[Playwright](https://playwright.dev) drives the app in Chromium and Firefox to catch regressions: signing in and who can see what, the DM's pack editing, buying through a cart, and pack history. Node is only needed for the tests; the app itself doesn't use it.
+
+```bash
+npm install
+npx playwright install chromium firefox
+npm test
+```
+
+`npm run test:chromium` runs just Chromium. `npm run test:docker` runs both browsers inside Microsoft's Playwright Linux image with PHP added (`tests/e2e/Dockerfile`), so you only need Docker and `npm install`: no PHP or browsers on the host. Use it where a browser won't run locally: Playwright's Firefox build fails to start on some Windows 11 machines with a "side-by-side configuration" error. Arguments after `--` go to Playwright, e.g. `npm run test:docker -- --project=firefox`. The first run downloads the image (about 2 GB).
+
+The tests start PHP's built-in server on port 8099 with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite file in the system temp folder. Every test starts from a fresh demo seed, so your `app/config.php` and database are never touched.
+
+PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
+
 ## Project layout
 
 ```
@@ -65,6 +81,7 @@ app/handlers/      one file per area: auth, party, inventory, stores, catalog, c
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 scripts/           seed-demo.php, dev-router.php
+tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
 ```
 
 ## How htmx is used

@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 define('APP_DIR', __DIR__);
 
-$configFile = APP_DIR . '/config.php';
+// QM_CONFIG points at another config file; the end-to-end tests use it to run against a throwaway database.
+$configFile = getenv('QM_CONFIG') ?: APP_DIR . '/config.php';
 if (!is_file($configFile)) {
     http_response_code(500);
     exit('Missing app/config.php. Copy app/config.example.php to app/config.php and fill in your database details.');

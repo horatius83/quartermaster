@@ -1,0 +1,16 @@
+{
+  "name": "quartermaster",
+  "private": true,
+  "description": "Dev tooling only: Playwright end-to-end tests. The app itself needs no Node.",
+  "scripts": {
+    "test": "playwright test",
+    "test:chromium": "playwright test --project=chromium",
+    "test:docker": "node tests/e2e/docker.mjs",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
+  }
+}
