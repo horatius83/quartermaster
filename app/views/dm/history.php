@@ -15,7 +15,7 @@
   </header>
 
   <?= render('partials/history_table', [
-      'rows' => $rows, 'showCharacter' => $showCharacter, 'path' => $path,
+      'rows' => $rows, 'hasMore' => $hasMore, 'showCharacter' => $showCharacter, 'path' => $path,
       'emptyText' => 'Nothing has changed yet.',
   ]) ?>
 </main>

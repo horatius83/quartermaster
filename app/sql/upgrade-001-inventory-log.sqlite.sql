@@ -3,7 +3,8 @@
 
 CREATE TABLE IF NOT EXISTS inventory_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  character_id  INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  character_id  INTEGER NULL REFERENCES characters(id) ON DELETE SET NULL,
+  character_name TEXT NOT NULL DEFAULT '',
   actor_user_id INTEGER NULL,
   actor_name    TEXT NOT NULL DEFAULT '',
   action        TEXT NOT NULL,

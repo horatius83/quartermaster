@@ -32,7 +32,28 @@ function db(): PDO
         $pdo = new PDO($dsn, $m['username'], $m['password'], $options);
         $pdo->exec("SET time_zone = '+00:00'");
     }
+    apply_upgrades($pdo);
     return $pdo;
+}
+
+/**
+ * Bring a database created by an older version up to date by running app/sql/upgrade-*.<driver>.sql.
+ * The upgrade files are idempotent; this only runs them when the newest table they add is missing.
+ */
+function apply_upgrades(PDO $pdo): void
+{
+    try {
+        $pdo->query('SELECT 1 FROM inventory_log LIMIT 1');
+        return;
+    } catch (PDOException) {
+        // Older database: fall through and upgrade it.
+    }
+    foreach (glob(APP_DIR . '/sql/upgrade-*.' . db_driver() . '.sql') as $file) {
+        $sql = preg_replace('/^\s*--.*$/m', '', file_get_contents($file));
+        foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
+            $pdo->exec($statement);
+        }
+    }
 }
 
 function db_driver(): string

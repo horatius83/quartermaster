@@ -94,9 +94,13 @@ function add_to_inventory(int $characterId, int $itemId, int $qty, string $notes
     }
 }
 
+const HISTORY_PAGE_SIZE = 50;
+
 /**
  * Record a change to a character's pack or purse. $qty and $coinCp are signed (negative = taken away).
- * Repeated −/+ clicks by the same person on the same stack fold into one 'adjust' entry.
+ * Repeated clicks in the same direction by the same person on the same stack, within five minutes of
+ * the first, fold into one 'adjust' entry. A − after a + starts a new entry, so nothing is ever erased.
+ * Call inside the transaction that makes the change.
  */
 function log_inventory(int $characterId, string $action, ?array $item = null, int $qty = 0, int $coinCp = 0, string $notes = '', string $detail = ''): void
 {
@@ -107,42 +111,43 @@ function log_inventory(int $characterId, string $action, ?array $item = null, in
     $itemId = $item ? (int)$item['item_id'] : null;
 
     if ($action === 'adjust') {
-        $last = q_one('SELECT * FROM inventory_log WHERE character_id = ? ORDER BY id DESC LIMIT 1', [$characterId]);
+        $last = q_one('SELECT * FROM inventory_log WHERE character_id = ? ORDER BY id DESC LIMIT 1' . for_update(), [$characterId]);
         if ($last && $last['action'] === 'adjust' && (int)$last['item_id'] === $itemId && $last['notes'] === $notes
             && (int)$last['actor_user_id'] === (int)($actor['id'] ?? 0)
+            && ((int)$last['quantity'] > 0) === ($qty > 0)
             && strtotime($last['created_at'] . ' UTC') > time() - 300) {
-            $merged = (int)$last['quantity'] + $qty;
-            if ($merged === 0) {
-                q('DELETE FROM inventory_log WHERE id = ?', [$last['id']]);
-            } else {
-                q('UPDATE inventory_log SET quantity = ?, created_at = ? WHERE id = ?', [$merged, now(), $last['id']]);
-            }
+            q('UPDATE inventory_log SET quantity = quantity + ? WHERE id = ?', [$qty, $last['id']]);
             return;
         }
     }
 
     q(
-        'INSERT INTO inventory_log (character_id, actor_user_id, actor_name, action, item_id, item_name, notes, quantity, coin_cp, detail, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [$characterId, $actor['id'] ?? null, $actor['username'] ?? '', $action, $itemId, $item['name'] ?? '',
-         $notes, $qty, $coinCp, mb_substr($detail, 0, 255), now()]
+        'INSERT INTO inventory_log (character_id, character_name, actor_user_id, actor_name, action, item_id, item_name, notes, quantity, coin_cp, detail, created_at)
+         SELECT id, name, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM characters WHERE id = ?',
+        [$actor['id'] ?? null, $actor['username'] ?? '', $action, $itemId, $item['name'] ?? '',
+         $notes, $qty, $coinCp, mb_substr($detail, 0, 255), now(), $characterId]
     );
 }
 
-/** Pack history, newest first. $characterId null = the whole party. */
-function inventory_log_rows(?int $characterId, int $beforeId = 0, int $limit = 50): array
+/**
+ * Pack history, newest first, one page at a time. $characterId null = the whole party,
+ * including characters who have since been deleted.
+ * @return array{0: array, 1: bool} the rows, and whether older ones exist
+ */
+function inventory_log_page(?int $characterId, int $beforeId = 0): array
 {
-    $sql = 'SELECT l.*, c.name AS character_name FROM inventory_log l JOIN characters c ON c.id = l.character_id WHERE 1 = 1';
+    $sql = 'SELECT * FROM inventory_log WHERE 1 = 1';
     $params = [];
     if ($characterId !== null) {
-        $sql .= ' AND l.character_id = ?';
+        $sql .= ' AND character_id = ?';
         $params[] = $characterId;
     }
     if ($beforeId > 0) {
-        $sql .= ' AND l.id < ?';
+        $sql .= ' AND id < ?';
         $params[] = $beforeId;
     }
-    return q_all($sql . ' ORDER BY l.id DESC LIMIT ' . (int)$limit, $params);
+    $rows = q_all($sql . ' ORDER BY id DESC LIMIT ' . (HISTORY_PAGE_SIZE + 1), $params);
+    return [array_slice($rows, 0, HISTORY_PAGE_SIZE), count($rows) > HISTORY_PAGE_SIZE];
 }
 
 function item_by_name(string $name): ?array

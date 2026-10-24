@@ -89,10 +89,11 @@ CREATE TABLE cart_items (
 );
 
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
--- item_name and actor_name are copied in so the history survives renames and deleted logins.
+-- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  character_id  INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  character_id  INTEGER NULL REFERENCES characters(id) ON DELETE SET NULL,
+  character_name TEXT NOT NULL DEFAULT '',
   actor_user_id INTEGER NULL,
   actor_name    TEXT NOT NULL DEFAULT '',
   action        TEXT NOT NULL,

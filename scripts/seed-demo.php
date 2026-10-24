@@ -77,7 +77,7 @@ transaction(function () use ($cat) {
     foreach ($packs as $user => $rows) {
         foreach ($rows as [$itemName, $qty, $notes]) {
             add_to_inventory($chars[$user], $item[$itemName], $qty, $notes);
-            log_inventory($chars[$user], 'give', ['item_id' => $item[$itemName], 'name' => $itemName], $qty, 0, $notes, 'Starting gear');
+            log_inventory($chars[$user], 'give', ['item_id' => $item[$itemName], 'name' => $itemName], $qty, notes: $notes, detail: 'Starting gear');
         }
     }
 });

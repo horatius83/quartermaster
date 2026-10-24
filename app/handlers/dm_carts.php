@@ -65,10 +65,10 @@ function dm_cart_approve(int $cartId): void
                     q('UPDATE store_stock SET quantity = quantity - ? WHERE id = ?', [$l['quantity'], $stock['id']]);
                 }
                 add_to_inventory((int)$char['id'], (int)$l['item_id'], (int)$l['quantity']);
-                log_inventory((int)$char['id'], 'purchase', $l, (int)$l['quantity'], 0, '', 'Bought at ' . $storeName);
+                log_inventory((int)$char['id'], 'purchase', $l, (int)$l['quantity'], detail: 'Bought at ' . $storeName);
             }
             q('UPDATE characters SET coin_cp = coin_cp - ? WHERE id = ?', [$total, $char['id']]);
-            log_inventory((int)$char['id'], 'purchase', null, 0, -$total, '', 'Paid at ' . $storeName);
+            log_inventory((int)$char['id'], 'purchase', coinCp: -$total, detail: 'Paid at ' . $storeName);
             q("UPDATE carts SET status = 'approved', decided_at = ? WHERE id = ?", [now(), $cartId]);
         });
     } catch (RuntimeException $e) {

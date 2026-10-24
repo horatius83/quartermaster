@@ -22,17 +22,13 @@ All four steps happen in one transaction.
 
 ## Pack history
 
-Every change to a pack or purse is written to `inventory_log`: items the DM gives, − / + adjustments, removals, moves between characters (one entry on each side), cart purchases, and purse edits. Each entry records who made it and when. Several − / + clicks on the same stack within five minutes are folded into one entry.
+Every change to a pack or purse is written to `inventory_log`: items the DM gives, − / + adjustments, removals, moves between characters (one entry on each side), cart purchases, and purse edits. Each entry records who made it and when. Several clicks in the same direction on the same stack, within five minutes of the first, are folded into one entry; a − after a + starts a new one, so nothing is erased. Entries keep the character's name, so the history stays readable after a character leaves the party.
 
 The DM sees it under *Pack history*, for the whole party or one character. Players see only their own, under *History*.
 
 ### Upgrading an existing install
 
-Databases created before pack history existed need the new table. Import `app/sql/upgrade-001-inventory-log.mysql.sql` once through phpMyAdmin (it is safe to run again). For a local SQLite database:
-
-```bash
-sqlite3 storage/quartermaster.sqlite < app/sql/upgrade-001-inventory-log.sqlite.sql
-```
+Databases created before pack history existed get the new table automatically on the first request after you deploy (the app runs `app/sql/upgrade-*.sql` when the table is missing). If your database user can't create tables, import `app/sql/upgrade-001-inventory-log.mysql.sql` yourself through phpMyAdmin; it is safe to run again.
 
 ## Deploying to Hostinger
 

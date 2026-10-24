@@ -10,7 +10,7 @@
     <p class="muted" style="margin:0;max-width:680px">Everything that went into or out of your pack and purse, newest first.</p>
 
     <?= render('partials/history_table', [
-        'rows' => $rows, 'showCharacter' => false, 'path' => $path,
+        'rows' => $rows, 'hasMore' => $hasMore, 'showCharacter' => false, 'path' => $path,
         'emptyText' => 'Nothing has changed in your pack yet.',
     ]) ?>
   </main>
