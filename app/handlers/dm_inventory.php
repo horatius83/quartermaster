@@ -4,12 +4,12 @@ declare(strict_types=1);
 function dm_inventory_index(): void
 {
     require_dm();
-    $first = q_val('SELECT id FROM characters ORDER BY name LIMIT 1');
+    $first = party_names()[0] ?? null;
     if (!$first) {
         flash('Add a character to the party first.');
         redirect('/dm/party');
     }
-    redirect('/dm/inventory/' . $first);
+    redirect('/dm/inventory/' . $first['id']);
 }
 
 function dm_inventory(int $characterId): void
@@ -28,7 +28,7 @@ function dm_inventory(int $characterId): void
     page('dm/inventory', [
         'active'     => 'inventory',
         'char'       => $char,
-        'characters' => q_all('SELECT id, name FROM characters ORDER BY name'),
+        'characters' => party_names(),
         'rows'       => inventory_rows($characterId, $cat),
         'cat'        => $cat,
         'carried'    => carried_weight($characterId),
@@ -166,7 +166,7 @@ function dm_inv_move(int $rowId): void
 
 function other_characters(int $exceptId): array
 {
-    return q_all('SELECT id, name FROM characters WHERE id <> ? ORDER BY name', [$exceptId]);
+    return array_values(array_filter(party_names(), fn($c) => (int)$c['id'] !== $exceptId));
 }
 
 function inventory_fragment_with_total(int $characterId): never

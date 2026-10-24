@@ -7,7 +7,6 @@ return [
     'sqlite' => [
         'path' => sys_get_temp_dir() . '/quartermaster-e2e.sqlite',
     ],
-    'campaign_name' => 'Test Campaign',
     'base_path' => null,
     'debug' => true,
 ];

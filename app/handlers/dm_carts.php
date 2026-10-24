@@ -4,8 +4,9 @@ declare(strict_types=1);
 function dm_carts(): void
 {
     require_dm();
-    $pendingIds = array_column(q_all("SELECT id FROM carts WHERE status = 'submitted' ORDER BY submitted_at"), 'id');
-    $recentIds  = array_column(q_all("SELECT id FROM carts WHERE status IN ('approved','declined') ORDER BY decided_at DESC LIMIT 6"), 'id');
+    $inCampaign = 'SELECT c.id FROM carts c JOIN characters ch ON ch.id = c.character_id WHERE ch.campaign_id = ? AND ';
+    $pendingIds = array_column(q_all($inCampaign . "c.status = 'submitted' ORDER BY c.submitted_at", [campaign_id()]), 'id');
+    $recentIds  = array_column(q_all($inCampaign . "c.status IN ('approved','declined') ORDER BY c.decided_at DESC LIMIT 6", [campaign_id()]), 'id');
     page('dm/carts', [
         'active'  => 'carts',
         'pending' => array_map(fn($id) => cart_detail((int)$id), $pendingIds),

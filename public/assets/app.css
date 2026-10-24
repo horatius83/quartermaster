@@ -83,6 +83,14 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.05; m
 .nav-link[aria-current="page"] { background: var(--clay); color: #fff; }
 .nav-button { width: 100%; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; color: var(--bark-soft); }
 .nav-rule { border-top: 1px dashed var(--ink-soft); margin: 14px 8px; }
+.campaign-name { margin: -12px 8px 12px; color: var(--ochre); font-size: 20px; }
+.campaign-switch { margin: -12px 0 12px; }
+.campaign-switch select {
+  width: 100%; min-height: 44px; padding: 6px 10px;
+  font: inherit; font-size: 20px; color: var(--ochre);
+  background: rgba(255, 255, 255, 0.06); border: 1.5px dashed var(--ochre); border-radius: var(--wobble);
+}
+.campaign-switch option { color: var(--ink); background: var(--field); }
 
 .badge { background: var(--ochre); color: var(--ink); border-radius: 999px; padding: 0 9px; font-size: 15px; }
 .badge-empty { display: none; }

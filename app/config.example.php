@@ -19,9 +19,6 @@ return [
         'path' => __DIR__ . '/../storage/quartermaster.sqlite',
     ],
 
-    // Shown under the page title on the DM dashboard.
-    'campaign_name' => 'My Campaign',
-
     // Leave null to detect automatically. Only set this if the app lives in a sub-folder
     // and links come out wrong, e.g. '/quartermaster'.
     'base_path' => null,

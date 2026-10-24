@@ -12,8 +12,16 @@ CREATE TABLE users (
   UNIQUE KEY uq_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
+CREATE TABLE campaigns (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(100) NOT NULL,
+  created_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE characters (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  campaign_id    INT UNSIGNED NOT NULL,
   user_id        INT UNSIGNED NULL,
   name           VARCHAR(100) NOT NULL,
   class_label    VARCHAR(100) NOT NULL DEFAULT '',
@@ -21,6 +29,8 @@ CREATE TABLE characters (
   carry_capacity DECIMAL(8,2) NOT NULL DEFAULT 150,
   created_at     DATETIME NOT NULL,
   UNIQUE KEY uq_characters_user (user_id),
+  KEY ix_characters_campaign (campaign_id),
+  CONSTRAINT fk_characters_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
   CONSTRAINT fk_characters_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -55,12 +65,15 @@ CREATE TABLE inventory (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE stores (
-  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name       VARCHAR(100) NOT NULL,
-  kind       VARCHAR(100) NOT NULL DEFAULT '',
-  blurb      VARCHAR(1000) NOT NULL DEFAULT '',
-  is_open    TINYINT(1) NOT NULL DEFAULT 0,
-  created_at DATETIME NOT NULL
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  campaign_id INT UNSIGNED NOT NULL,
+  name        VARCHAR(100) NOT NULL,
+  kind        VARCHAR(100) NOT NULL DEFAULT '',
+  blurb       VARCHAR(1000) NOT NULL DEFAULT '',
+  is_open     TINYINT(1) NOT NULL DEFAULT 0,
+  created_at  DATETIME NOT NULL,
+  KEY ix_stores_campaign (campaign_id),
+  CONSTRAINT fk_stores_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- No rows for a store = every character may shop there.
@@ -115,6 +128,7 @@ CREATE TABLE cart_items (
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  campaign_id   INT UNSIGNED NULL,
   character_id  INT UNSIGNED NULL,
   character_name VARCHAR(100) NOT NULL DEFAULT '',
   actor_user_id INT UNSIGNED NULL,
@@ -127,7 +141,9 @@ CREATE TABLE inventory_log (
   coin_cp       INT NOT NULL DEFAULT 0,
   detail        VARCHAR(255) NOT NULL DEFAULT '',
   created_at    DATETIME NOT NULL,
+  KEY ix_inventory_log_campaign (campaign_id, id),
   KEY ix_inventory_log_character (character_id, id),
+  CONSTRAINT fk_inventory_log_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
   CONSTRAINT fk_inventory_log_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

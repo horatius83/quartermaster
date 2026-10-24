@@ -27,6 +27,19 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
       <?= render('partials/icon_pouch', []) ?>
       <span>Quartermaster</span>
     </a>
+    <?php $allCampaigns = campaigns(); $here = current_campaign(); ?>
+    <?php if (count($allCampaigns) > 1): ?>
+      <form class="campaign-switch" hx-post="<?= e(url('/dm/campaigns/switch')) ?>" hx-trigger="change">
+        <label class="visually-hidden" for="campaign-switch">Campaign</label>
+        <select id="campaign-switch" name="campaign_id">
+          <?php foreach ($allCampaigns as $c): ?>
+            <option value="<?= (int)$c['id'] ?>"<?= (int)$c['id'] === (int)$here['id'] ? ' selected' : '' ?>><?= e($c['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </form>
+    <?php else: ?>
+      <p class="campaign-name"><?= e($here['name'] ?? '') ?></p>
+    <?php endif; ?>
     <?= $nav('dashboard', '/dm', 'Dashboard') ?>
     <?= $nav('inventory', '/dm/inventory', 'Player inventories') ?>
     <?= $nav('history', '/dm/history', 'Pack history') ?>
@@ -35,6 +48,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <?= $nav('carts', '/dm/carts', 'Cart review', render('partials/cart_badge_oob', ['inline' => true])) ?>
     <?= $nav('party', '/dm/party', 'Party & logins') ?>
     <div class="nav-rule"></div>
+    <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
       <button class="nav-link nav-button" type="submit">Sign out (<?= e($user['username']) ?>)</button>

@@ -45,7 +45,7 @@ function setup_form(): void
     if ((int)q_val('SELECT COUNT(*) FROM users') > 0) {
         redirect('/login');
     }
-    page('auth/setup', ['error' => null], 'Set up Quartermaster');
+    page('auth/setup', ['error' => null, 'campaign' => ''], 'Set up Quartermaster');
 }
 
 function setup_submit(): void
@@ -55,14 +55,26 @@ function setup_submit(): void
     }
     $username = post_str('username', 50);
     $password = (string)($_POST['password'] ?? '');
-    if ($username === '' || strlen($password) < 8) {
-        page('auth/setup', ['error' => 'Pick a username and a password of at least 8 characters.'], 'Set up Quartermaster');
+    $campaign = post_str('campaign', 100);
+    if ($username === '' || strlen($password) < 8 || $campaign === '') {
+        page('auth/setup', ['error' => 'Pick a username, a password of at least 8 characters and a campaign name.', 'campaign' => $campaign], 'Set up Quartermaster');
     }
-    $id = insert(
-        "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'dm', ?)",
-        [$username, password_hash($password, PASSWORD_DEFAULT), now()]
-    );
+    [$id, $campaignId] = transaction(function () use ($username, $password, $campaign) {
+        $id = insert(
+            "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'dm', ?)",
+            [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+        );
+        // An upgraded database already has the campaign its data moved into: name that one.
+        $campaignId = (int)q_val('SELECT id FROM campaigns ORDER BY id LIMIT 1');
+        if ($campaignId) {
+            q('UPDATE campaigns SET name = ? WHERE id = ?', [$campaign, $campaignId]);
+        } else {
+            $campaignId = create_campaign($campaign);
+        }
+        return [$id, $campaignId];
+    });
     login_user(['id' => $id]);
+    switch_campaign($campaignId);
     flash('Welcome, Dungeon Master. Add your players to get started.');
     redirect('/dm/party');
 }

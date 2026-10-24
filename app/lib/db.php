@@ -37,22 +37,45 @@ function db(): PDO
 }
 
 /**
- * Bring a database created by an older version up to date by running app/sql/upgrade-*.<driver>.sql.
- * The upgrade files are idempotent; this only runs them when the newest table they add is missing.
+ * Upgrades in app/sql/upgrade-<name>.<driver>.sql, oldest first, each with a query that only
+ * succeeds once that upgrade has been applied.
+ */
+const UPGRADES = [
+    '001-inventory-log' => 'SELECT 1 FROM inventory_log LIMIT 1',
+    '002-campaigns'     => 'SELECT campaign_id FROM inventory_log LIMIT 1',
+];
+
+/**
+ * Bring a database created by an older version up to date by running the upgrades it is missing.
+ * Up-to-date databases cost one probe query per request.
  */
 function apply_upgrades(PDO $pdo): void
 {
-    try {
-        $pdo->query('SELECT 1 FROM inventory_log LIMIT 1');
+    if (upgrade_applied($pdo, UPGRADES[array_key_last(UPGRADES)])) {
         return;
-    } catch (PDOException) {
-        // Older database: fall through and upgrade it.
     }
-    foreach (glob(APP_DIR . '/sql/upgrade-*.' . db_driver() . '.sql') as $file) {
-        $sql = preg_replace('/^\s*--.*$/m', '', file_get_contents($file));
+    foreach (UPGRADES as $name => $probe) {
+        if (upgrade_applied($pdo, $probe)) {
+            continue;
+        }
+        $sql = preg_replace('/^\s*--.*$/m', '', file_get_contents(APP_DIR . "/sql/upgrade-{$name}." . db_driver() . '.sql'));
         foreach (array_filter(array_map('trim', explode(';', $sql))) as $statement) {
             $pdo->exec($statement);
         }
+        // The upgrade names the campaign holding the existing data "My Campaign"; use the name config.php used to show.
+        if ($name === '002-campaigns' && is_string(config('campaign_name')) && config('campaign_name') !== '') {
+            $pdo->prepare('UPDATE campaigns SET name = ? WHERE id = 1')->execute([mb_substr(config('campaign_name'), 0, 100)]);
+        }
+    }
+}
+
+function upgrade_applied(PDO $pdo, string $probe): bool
+{
+    try {
+        $pdo->query($probe);
+        return true;
+    } catch (PDOException) {
+        return false;
     }
 }
 

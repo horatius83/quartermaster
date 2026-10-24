@@ -7,6 +7,10 @@ export const PLAYER_PASSWORD = 'adventure';
 export const BRYN = 1;
 export const TAMSIN = 2;
 export const WREN = 4;
+// The seed's second campaign: one character and one shop of its own.
+export const SECOND_CAMPAIGN = 'Winter’s Teeth';
+export const SELA = 5;
+export const FROSTGATE = 5;
 
 /** Sign in, dropping any session first so one test can switch between the DM and players. */
 export async function signIn(page: Page, username: string, password = PLAYER_PASSWORD): Promise<void> {

@@ -2,7 +2,7 @@
 
 A small web app for running a tabletop RPG's economy. The DM keeps every player's pack and purse, opens shops with their own stock, and approves what players put in their carts.
 
-- **DM:** party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog, approve or decline carts, and review the history of every pack and purse.
+- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog, approve or decline carts, and review the history of every pack and purse.
 - **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack and its history.
 
 Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals) and is loaded from a CDN.
@@ -20,15 +20,26 @@ Coin only changes hands when the DM approves a cart. Approving a cart:
 
 All four steps happen in one transaction.
 
+## Campaigns
+
+One DM login can run several campaigns. Each campaign has its own party, stores, carts and pack history; the item catalog is shared, so every campaign can stock the same gear at its own prices. The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters and stores are gone.
+
+Each player login belongs to one character, so it sees only that character's campaign. Someone playing in two campaigns gets a login for each.
+
 ## Pack history
 
 Every change to a pack or purse is written to `inventory_log`: items the DM gives, − / + adjustments, removals, moves between characters (one entry on each side), cart purchases, and purse edits. Each entry records who made it and when. Several clicks in the same direction on the same stack, within five minutes of the first, are folded into one entry; a − after a + starts a new one, so nothing is erased. Entries keep the character's name, so the history stays readable after a character leaves the party.
 
 The DM sees it under *Pack history*, for the whole party or one character. Players see only their own, under *History*.
 
-### Upgrading an existing install
+## Upgrading an existing install
 
-Databases created before pack history existed get the new table automatically on the first request after you deploy (the app runs `app/sql/upgrade-*.sql` when the table is missing). If your database user can't create tables, import `app/sql/upgrade-001-inventory-log.mysql.sql` yourself through phpMyAdmin; it is safe to run again.
+Older databases are brought up to date automatically on the first request after you deploy: the app runs whichever `app/sql/upgrade-*.sql` files the database is missing.
+
+- **001, pack history:** adds the history table. Safe to run again.
+- **002, campaigns:** adds campaigns and moves your existing party, stores and history into one campaign. It's named from `campaign_name` in your `config.php` if that's set, otherwise "My Campaign"; rename it under *Campaigns*. After that `campaign_name` is no longer used and you can delete it from `config.php`.
+
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import `upgrade-002-campaigns.mysql.sql` only once: unlike 001, running it a second time fails partway.
 
 ## Deploying to Hostinger
 
@@ -37,9 +48,9 @@ Databases created before pack history existed get the new table automatically on
 3. **Upload the code.** Use either option.
    - **Git (simplest):** in hPanel use *Advanced → Git* to deploy this repository into `public_html`. The root `.htaccess` sends every request into `public/`, so `app/` and `.git` are never served.
    - **Manual (tidiest):** put the `app/` folder in your home directory, next to `public_html`, and put the *contents* of `public/` into `public_html`.
-4. **Configure.** In *File Manager*, copy `app/config.example.php` to `app/config.php` and fill in the database details and your campaign name. `config.php` is git-ignored, so redeploys won't overwrite it.
+4. **Configure.** In *File Manager*, copy `app/config.example.php` to `app/config.php` and fill in the database details. `config.php` is git-ignored, so redeploys won't overwrite it.
 5. **PHP version.** Use PHP 8.1 or newer under *Advanced → PHP Configuration*. Make sure `pdo_mysql` is enabled; it is by default.
-6. **Create the DM account.** Visit your site. The first visit goes to `/setup`, where you create the DM login. After that, add players under *Party & logins*.
+6. **Create the DM account.** Visit your site. The first visit goes to `/setup`, where you create the DM login and name your first campaign. After that, add players under *Party & logins*.
 
 Use HTTPS, which Hostinger provides for free: session cookies are marked secure automatically when the site is served over HTTPS.
 
@@ -53,11 +64,11 @@ php scripts/seed-demo.php                  # optional: sample party, stores and 
 php -S localhost:8000 -t public scripts/dev-router.php
 ```
 
-Open http://localhost:8000. The demo logins are `dm` / `dungeon123` and players `bryn`, `tamsin`, `oskar`, `wren` / `adventure`. The seed script also works against MySQL, but only on an empty database.
+Open http://localhost:8000. The demo logins are `dm` / `dungeon123` and players `bryn`, `tamsin`, `oskar`, `wren` / `adventure`. The demo has a second, smaller campaign with one player, `sela` / `adventure`, so you can try switching. The seed script also works against MySQL, but only on an empty database.
 
 ## End-to-end tests
 
-[Playwright](https://playwright.dev) drives the app in Chromium and Firefox to catch regressions: signing in and who can see what, the DM's pack editing, buying through a cart, and pack history. Node is only needed for the tests; the app itself doesn't use it.
+[Playwright](https://playwright.dev) drives the app in Chromium and Firefox to catch regressions: signing in and who can see what, the DM's pack editing, buying through a cart, pack history, and keeping campaigns apart. Node is only needed for the tests; the app itself doesn't use it.
 
 ```bash
 npm install
@@ -77,7 +88,7 @@ PHP is found in this order: the `PHP` environment variable (the path to `php`), 
 public/            web root: index.php (routes), .htaccess, assets/ (CSS, JS)
 app/bootstrap.php  loads config, libraries and handlers
 app/lib/           db (PDO helpers), auth (sessions, CSRF), money, router, shared queries
-app/handlers/      one file per area: auth, party, inventory, stores, catalog, carts, player
+app/handlers/      one file per area: auth, campaigns, party, inventory, stores, catalog, carts, player
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 scripts/           seed-demo.php, dev-router.php

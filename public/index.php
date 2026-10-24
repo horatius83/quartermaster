@@ -15,6 +15,13 @@ $routes = [
     ['GET',  '/setup',                     'setup_form'],
     ['POST', '/setup',                     'setup_submit'],
 
+    // DM: campaigns
+    ['GET',  '/dm/campaigns',              'dm_campaigns'],
+    ['POST', '/dm/campaigns',              'dm_campaign_create'],
+    ['POST', '/dm/campaigns/switch',       'dm_campaign_switch'],
+    ['POST', '/dm/campaigns/{id}',         'dm_campaign_update'],
+    ['POST', '/dm/campaigns/{id}/delete',  'dm_campaign_delete'],
+
     // DM: dashboard & party
     ['GET',  '/dm',                        'dm_dashboard'],
     ['GET',  '/dm/party',                  'dm_party'],

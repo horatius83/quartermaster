@@ -4,7 +4,7 @@ declare(strict_types=1);
 function dm_stores_index(): void
 {
     require_dm();
-    $first = q_val('SELECT id FROM stores ORDER BY name LIMIT 1');
+    $first = q_val('SELECT id FROM stores WHERE campaign_id = ? ORDER BY name LIMIT 1', [campaign_id()]);
     if ($first) {
         redirect('/dm/stores/' . $first);
     }
@@ -20,8 +20,8 @@ function dm_store_create(): void
         redirect('/dm/stores');
     }
     $id = insert(
-        'INSERT INTO stores (name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, 0, ?)',
-        [$name, post_str('kind', 100), '', now()]
+        'INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 0, ?)',
+        [campaign_id(), $name, post_str('kind', 100), '', now()]
     );
     flash("{$name} is ready for stocking. It stays hidden from players until you open it.");
     redirect('/dm/stores/' . $id);
@@ -36,7 +36,7 @@ function dm_store(int $storeId): void
         'stores'     => stores_summary(),
         'store'      => $store,
         'stock'      => store_stock_rows($storeId),
-        'characters' => q_all('SELECT id, name FROM characters ORDER BY name'),
+        'characters' => party_names(),
         'access'     => store_access_ids($storeId),
     ], $store['name']);
 }
@@ -46,7 +46,7 @@ function dm_store_update(int $storeId): void
     require_dm();
     $store = store($storeId) ?? abort(404, 'No such store.');
     $name = post_str('name', 100) ?: $store['name'];
-    $allIds = array_map('intval', array_column(q_all('SELECT id FROM characters'), 'id'));
+    $allIds = array_map('intval', array_column(party_names(), 'id'));
     $chosen = array_values(array_intersect($allIds, array_map('intval', (array)($_POST['access'] ?? []))));
 
     transaction(function () use ($storeId, $name, $chosen, $allIds) {

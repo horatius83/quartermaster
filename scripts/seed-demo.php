@@ -1,7 +1,8 @@
 <?php
 // Fills an EMPTY database with a sample party, catalog and stores so you can click around.
 // Run from the project root:  php scripts/seed-demo.php
-// Logins created: dm / dungeon123, and players bryn, tamsin, oskar, wren (password: adventure)
+// Logins created: dm / dungeon123, and players bryn, tamsin, oskar, wren (password: adventure).
+// A second, smaller campaign has one player, sela (password: adventure), and one shop.
 declare(strict_types=1);
 
 $_SERVER['SCRIPT_NAME'] = '/index.php';
@@ -19,6 +20,8 @@ foreach (categories() as $c) {
 
 transaction(function () use ($cat) {
     insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('dm', ?, 'dm', ?)", [password_hash('dungeon123', PASSWORD_DEFAULT), now()]);
+    $campaign = create_campaign('The Sunken Crown');
+    $winter = create_campaign('Winter’s Teeth');
 
     $party = [
         ['bryn',   'Bryn Ashvale',  'Fighter 5', 41200, 240],
@@ -29,7 +32,7 @@ transaction(function () use ($cat) {
     $chars = [];
     foreach ($party as [$user, $name, $class, $coin, $cap]) {
         $uid = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)", [$user, password_hash('adventure', PASSWORD_DEFAULT), now()]);
-        $chars[$user] = insert('INSERT INTO characters (user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, ?, ?)', [$uid, $name, $class, $coin, $cap, now()]);
+        $chars[$user] = insert('INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [$campaign, $uid, $name, $class, $coin, $cap, now()]);
     }
 
     // name, category, weight, price (cp)  — prices from the 5e SRD
@@ -61,7 +64,7 @@ transaction(function () use ($cat) {
             [['Bag of Holding', 1], ['Driftglobe', 1], ['Silver locket', 1]]],
     ];
     foreach ($stores as [$name, $kind, $blurb, $open, $stock]) {
-        $sid = insert('INSERT INTO stores (name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, ?)', [$name, $kind, $blurb, $open, now()]);
+        $sid = insert('INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, ?, ?)', [$campaign, $name, $kind, $blurb, $open, now()]);
         foreach ($stock as [$itemName, $qty]) {
             $price = (int)q_val('SELECT price_cp FROM items WHERE id = ?', [$item[$itemName]]) ?: 50000;
             q('INSERT INTO store_stock (store_id, item_id, price_cp, quantity) VALUES (?, ?, ?, ?)', [$sid, $item[$itemName], $price, $qty]);
@@ -80,6 +83,18 @@ transaction(function () use ($cat) {
             log_inventory($chars[$user], 'give', ['item_id' => $item[$itemName], 'name' => $itemName], $qty, notes: $notes, detail: 'Starting gear');
         }
     }
+
+    // The second campaign shares the catalog but nothing else.
+    $uid = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('sela', ?, 'player', ?)", [password_hash('adventure', PASSWORD_DEFAULT), now()]);
+    $sela = insert('INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [$winter, $uid, 'Sela Morrow', 'Cleric 2', 4500, 150, now()]);
+    $sid = insert('INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 1, ?)', [$winter, 'The Frostgate Market', 'General goods', 'Furs, rope and lamp oil. Prices rise with the snow.', now()]);
+    foreach (['Hempen rope (50 ft)', 'Torch', 'Rations (1 day)', 'Healer’s kit'] as $itemName) {
+        q('INSERT INTO store_stock (store_id, item_id, price_cp, quantity) VALUES (?, ?, (SELECT price_cp FROM items WHERE id = ?), NULL)', [$sid, $item[$itemName], $item[$itemName]]);
+    }
+    foreach ([['Dagger', 1], ['Rations (1 day)', 3]] as [$itemName, $qty]) {
+        add_to_inventory($sela, $item[$itemName], $qty);
+        log_inventory($sela, 'give', ['item_id' => $item[$itemName], 'name' => $itemName], $qty, detail: 'Starting gear');
+    }
 });
 
-echo "Seeded. Sign in as dm / dungeon123, or a player (bryn, tamsin, oskar, wren) / adventure.\n";
+echo "Seeded. Sign in as dm / dungeon123, or a player (bryn, tamsin, oskar, wren, or sela in the second campaign) / adventure.\n";
