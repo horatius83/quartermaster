@@ -93,9 +93,11 @@ test('a new campaign starts with an empty party and can be renamed and deleted',
   await page.goto('/dm/party');
   await expect(page.locator('tbody')).not.toContainText('Ilse Varn');
 
-  // A campaign with a party can't be deleted; once empty it can. It's the seed's third campaign.
+  // A campaign with a party can't be deleted; once empty it can. Find its row by name once, then by id,
+  // since renaming changes the name.
   await page.goto('/dm/campaigns');
-  const row = page.locator('#campaign-3');
+  const rowId = await page.locator('tbody tr', { has: page.locator('input[value="Tomb of Ash"]') }).getAttribute('id');
+  const row = page.locator(`#${rowId}`);
   await expect(row.getByRole('button', { name: 'Delete' })).toHaveCount(0);
   await row.getByLabel(/^Name of/).fill('Tomb of Embers');
   await row.getByRole('button', { name: 'Rename' }).click();

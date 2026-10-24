@@ -48,29 +48,32 @@ function dm_campaign_switch(): void
     redirect('/dm');
 }
 
-/** Only an empty campaign can go, so a slip can't wipe out a party. Its pack history goes with it. */
+/**
+ * Only an empty campaign can go, so a slip can't wipe out a party. Its pack history goes with it (ON DELETE CASCADE).
+ * The checks run with the campaign row locked: adding a character or store to it has to wait, so none can sneak in.
+ */
 function dm_campaign_delete(int $id): void
 {
     require_dm();
-    $campaign = null;
-    foreach (campaigns() as $c) {
-        if ((int)$c['id'] === $id) {
-            $campaign = $c;
-        }
-    }
-    $campaign ?? abort(404, 'No such campaign.');
-    if ((int)$campaign['character_count'] > 0 || (int)$campaign['store_count'] > 0) {
-        flash("Remove {$campaign['name']}’s characters and stores before deleting it.", 'error');
+    try {
+        $campaign = transaction(function () use ($id) {
+            $campaign = q_one('SELECT * FROM campaigns WHERE id = ?' . for_update(), [$id]);
+            if (!$campaign) {
+                throw new RuntimeException('That campaign is already gone.');
+            }
+            if (q_val('SELECT 1 FROM characters WHERE campaign_id = ? UNION ALL SELECT 1 FROM stores WHERE campaign_id = ? LIMIT 1', [$id, $id])) {
+                throw new RuntimeException("Remove {$campaign['name']}’s characters and stores before deleting it.");
+            }
+            if ((int)q_val('SELECT COUNT(*) FROM campaigns') === 1) {
+                throw new RuntimeException('This is your only campaign, so it stays.');
+            }
+            q('DELETE FROM campaigns WHERE id = ?', [$id]);
+            return $campaign;
+        });
+    } catch (RuntimeException $e) {
+        flash($e->getMessage(), 'error');
         redirect('/dm/campaigns');
     }
-    if (count(campaigns()) === 1) {
-        flash('This is your only campaign, so it stays.', 'error');
-        redirect('/dm/campaigns');
-    }
-    transaction(function () use ($id) {
-        q('DELETE FROM inventory_log WHERE campaign_id = ?', [$id]);
-        q('DELETE FROM campaigns WHERE id = ?', [$id]);
-    });
     if ($id === campaign_id()) {
         unset($_SESSION['campaign_id']);
     }

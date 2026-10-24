@@ -99,7 +99,11 @@ function dm_cart_decline(int $cartId): void
 function dm_cart_item_qty(int $lineId): void
 {
     require_dm();
-    $line = q_one('SELECT * FROM cart_items WHERE id = ?', [$lineId]) ?? abort(404, 'That line is gone.');
+    $line = q_one(
+        'SELECT ci.* FROM cart_items ci JOIN carts c ON c.id = ci.cart_id JOIN characters ch ON ch.id = c.character_id
+          WHERE ci.id = ? AND ch.campaign_id = ?',
+        [$lineId, campaign_id()]
+    ) ?? abort(404, 'That line is gone.');
     submitted_cart_or_fail((int)$line['cart_id']);
     $qty = max(0, post_int('quantity', (int)$line['quantity']));
     if ($qty === 0) {

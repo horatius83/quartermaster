@@ -34,12 +34,12 @@ The DM sees it under *Pack history*, for the whole party or one character. Playe
 
 ## Upgrading an existing install
 
-Older databases are brought up to date automatically on the first request after you deploy: the app runs whichever `app/sql/upgrade-*.sql` files the database is missing.
+Older databases are brought up to date automatically on the first request after you deploy: the app runs whichever `app/sql/upgrade-*.sql` files the database is missing. Only one request upgrades at a time, and if an upgrade is interrupted, the next request finishes it.
 
 - **001, pack history:** adds the history table. Safe to run again.
 - **002, campaigns:** adds campaigns and moves your existing party, stores and history into one campaign. It's named from `campaign_name` in your `config.php` if that's set, otherwise "My Campaign"; rename it under *Campaigns*. After that `campaign_name` is no longer used and you can delete it from `config.php`.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import `upgrade-002-campaigns.mysql.sql` only once: unlike 001, running it a second time fails partway.
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import `upgrade-002-campaigns.mysql.sql` only once: unlike 001, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 

@@ -15,6 +15,12 @@ function campaigns(): array
     );
 }
 
+/** Id and name of every campaign, for the sidebar's campaign menu. */
+function campaign_names(): array
+{
+    return q_all('SELECT id, name FROM campaigns ORDER BY name, id');
+}
+
 function campaign(int $id): ?array
 {
     return q_one('SELECT * FROM campaigns WHERE id = ?', [$id]);

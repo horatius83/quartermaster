@@ -27,7 +27,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
       <?= render('partials/icon_pouch', []) ?>
       <span>Quartermaster</span>
     </a>
-    <?php $allCampaigns = campaigns(); $here = current_campaign(); ?>
+    <?php $allCampaigns = campaign_names(); $here = current_campaign(); ?>
     <?php if (count($allCampaigns) > 1): ?>
       <form class="campaign-switch" hx-post="<?= e(url('/dm/campaigns/switch')) ?>" hx-trigger="change">
         <label class="visually-hidden" for="campaign-switch">Campaign</label>
