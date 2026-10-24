@@ -30,6 +30,8 @@ $routes = [
     ['POST', '/dm/inv/{id}/qty',           'dm_inv_qty'],
     ['POST', '/dm/inv/{id}/move',          'dm_inv_move'],
     ['POST', '/dm/inv/{id}/delete',        'dm_inv_delete'],
+    ['GET',  '/dm/history',                'dm_history'],
+    ['GET',  '/dm/history/{id}',           'dm_history_character'],
 
     // DM: stores
     ['GET',  '/dm/stores',                 'dm_stores_index'],
@@ -63,6 +65,7 @@ $routes = [
     ['POST', '/shop/{id}/withdraw',        'shop_withdraw'],
     ['POST', '/shop/line/{id}',            'shop_line_qty'],
     ['GET',  '/pack',                      'player_pack'],
+    ['GET',  '/history',                   'player_history'],
 ];
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';

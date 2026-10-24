@@ -88,6 +88,24 @@ CREATE TABLE cart_items (
   UNIQUE (cart_id, item_id)
 );
 
+-- Every change to a pack or purse. quantity and coin_cp are signed deltas.
+-- item_name and actor_name are copied in so the history survives renames and deleted logins.
+CREATE TABLE inventory_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  character_id  INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  actor_user_id INTEGER NULL,
+  actor_name    TEXT NOT NULL DEFAULT '',
+  action        TEXT NOT NULL,
+  item_id       INTEGER NULL,
+  item_name     TEXT NOT NULL DEFAULT '',
+  notes         TEXT NOT NULL DEFAULT '',
+  quantity      INTEGER NOT NULL DEFAULT 0,
+  coin_cp       INTEGER NOT NULL DEFAULT 0,
+  detail        TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL
+);
+CREATE INDEX ix_inventory_log_character ON inventory_log (character_id, id);
+
 INSERT INTO categories (name, slug, sort_order) VALUES
   ('Weapon', 'weapon', 1),
   ('Armor', 'armor', 2),

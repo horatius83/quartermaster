@@ -35,6 +35,7 @@ function dm_cart_approve(int $cartId): void
                 throw new RuntimeException('That cart has already been handled.');
             }
             $char = q_one('SELECT * FROM characters WHERE id = ?' . for_update(), [$cart['character_id']]);
+            $storeName = (string)q_val('SELECT name FROM stores WHERE id = ?', [$cart['store_id']]);
             $lines = q_all(
                 'SELECT ci.*, i.name FROM cart_items ci JOIN items i ON i.id = ci.item_id WHERE ci.cart_id = ?',
                 [$cartId]
@@ -64,8 +65,10 @@ function dm_cart_approve(int $cartId): void
                     q('UPDATE store_stock SET quantity = quantity - ? WHERE id = ?', [$l['quantity'], $stock['id']]);
                 }
                 add_to_inventory((int)$char['id'], (int)$l['item_id'], (int)$l['quantity']);
+                log_inventory((int)$char['id'], 'purchase', $l, (int)$l['quantity'], 0, '', 'Bought at ' . $storeName);
             }
             q('UPDATE characters SET coin_cp = coin_cp - ? WHERE id = ?', [$total, $char['id']]);
+            log_inventory((int)$char['id'], 'purchase', null, 0, -$total, '', 'Paid at ' . $storeName);
             q("UPDATE carts SET status = 'approved', decided_at = ? WHERE id = ?", [now(), $cartId]);
         });
     } catch (RuntimeException $e) {

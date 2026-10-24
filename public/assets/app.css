@@ -279,6 +279,9 @@ table.ledger { width: 100%; min-width: 720px; border-collapse: collapse; }
 .ledger th:last-child, .ledger td:last-child { padding-right: 18px; }
 .ledger tr:last-child td { border-bottom: 0; }
 .item-name { font-size: 20px; }
+.delta { display: inline-block; min-width: 3ch; font-weight: 700; }
+.delta-up { color: var(--moss); }
+.delta-down { color: var(--clay-dark); }
 
 /* ---------- htmx states ---------- */
 

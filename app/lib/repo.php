@@ -94,6 +94,57 @@ function add_to_inventory(int $characterId, int $itemId, int $qty, string $notes
     }
 }
 
+/**
+ * Record a change to a character's pack or purse. $qty and $coinCp are signed (negative = taken away).
+ * Repeated −/+ clicks by the same person on the same stack fold into one 'adjust' entry.
+ */
+function log_inventory(int $characterId, string $action, ?array $item = null, int $qty = 0, int $coinCp = 0, string $notes = '', string $detail = ''): void
+{
+    if ($qty === 0 && $coinCp === 0) {
+        return;
+    }
+    $actor = current_user();
+    $itemId = $item ? (int)$item['item_id'] : null;
+
+    if ($action === 'adjust') {
+        $last = q_one('SELECT * FROM inventory_log WHERE character_id = ? ORDER BY id DESC LIMIT 1', [$characterId]);
+        if ($last && $last['action'] === 'adjust' && (int)$last['item_id'] === $itemId && $last['notes'] === $notes
+            && (int)$last['actor_user_id'] === (int)($actor['id'] ?? 0)
+            && strtotime($last['created_at'] . ' UTC') > time() - 300) {
+            $merged = (int)$last['quantity'] + $qty;
+            if ($merged === 0) {
+                q('DELETE FROM inventory_log WHERE id = ?', [$last['id']]);
+            } else {
+                q('UPDATE inventory_log SET quantity = ?, created_at = ? WHERE id = ?', [$merged, now(), $last['id']]);
+            }
+            return;
+        }
+    }
+
+    q(
+        'INSERT INTO inventory_log (character_id, actor_user_id, actor_name, action, item_id, item_name, notes, quantity, coin_cp, detail, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [$characterId, $actor['id'] ?? null, $actor['username'] ?? '', $action, $itemId, $item['name'] ?? '',
+         $notes, $qty, $coinCp, mb_substr($detail, 0, 255), now()]
+    );
+}
+
+/** Pack history, newest first. $characterId null = the whole party. */
+function inventory_log_rows(?int $characterId, int $beforeId = 0, int $limit = 50): array
+{
+    $sql = 'SELECT l.*, c.name AS character_name FROM inventory_log l JOIN characters c ON c.id = l.character_id WHERE 1 = 1';
+    $params = [];
+    if ($characterId !== null) {
+        $sql .= ' AND l.character_id = ?';
+        $params[] = $characterId;
+    }
+    if ($beforeId > 0) {
+        $sql .= ' AND l.id < ?';
+        $params[] = $beforeId;
+    }
+    return q_all($sql . ' ORDER BY l.id DESC LIMIT ' . (int)$limit, $params);
+}
+
 function item_by_name(string $name): ?array
 {
     return q_one('SELECT * FROM items WHERE LOWER(name) = LOWER(?)', [$name]);

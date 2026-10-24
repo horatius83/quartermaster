@@ -6,7 +6,10 @@
   </nav>
 
   <header class="page-head">
-    <h1 class="page-title"><?= e($char['name']) ?>’s Pack</h1>
+    <div>
+      <h1 class="page-title"><?= e($char['name']) ?>’s Pack</h1>
+      <a class="small" href="<?= e(url('/dm/history/' . $char['id'])) ?>">See what’s changed</a>
+    </div>
     <?= render('partials/character_sheet', ['char' => $char]) ?>
   </header>
 

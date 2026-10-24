@@ -2,8 +2,8 @@
 
 A small web app for running a tabletop RPG's economy. The DM keeps every player's pack and purse, opens shops with their own stock, and approves what players put in their carts.
 
-- **DM:** party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog, approve or decline carts.
-- **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack.
+- **DM:** party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog, approve or decline carts, and review the history of every pack and purse.
+- **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack and its history.
 
 Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals) and is loaded from a CDN.
 
@@ -19,6 +19,20 @@ Coin only changes hands when the DM approves a cart. Approving a cart:
 4. stacks the items into the character's pack.
 
 All four steps happen in one transaction.
+
+## Pack history
+
+Every change to a pack or purse is written to `inventory_log`: items the DM gives, − / + adjustments, removals, moves between characters (one entry on each side), cart purchases, and purse edits. Each entry records who made it and when. Several − / + clicks on the same stack within five minutes are folded into one entry.
+
+The DM sees it under *Pack history*, for the whole party or one character. Players see only their own, under *History*.
+
+### Upgrading an existing install
+
+Databases created before pack history existed need the new table. Import `app/sql/upgrade-001-inventory-log.mysql.sql` once through phpMyAdmin (it is safe to run again). For a local SQLite database:
+
+```bash
+sqlite3 storage/quartermaster.sqlite < app/sql/upgrade-001-inventory-log.sqlite.sql
+```
 
 ## Deploying to Hostinger
 
@@ -53,7 +67,7 @@ app/bootstrap.php  loads config, libraries and handlers
 app/lib/           db (PDO helpers), auth (sessions, CSRF), money, router, shared queries
 app/handlers/      one file per area: auth, party, inventory, stores, catalog, carts, player
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
-app/sql/           schema.mysql.sql (production) and schema.sqlite.sql (local dev)
+app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 scripts/           seed-demo.php, dev-router.php
 ```
 
@@ -69,6 +83,7 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | Item name suggestions | `GET /dm/catalog/suggest` | the `<datalist>` options |
 | Inline price, stock and catalog edits | `POST` on `change` | that row |
 | Add to cart, ± in cart, submit, withdraw | `POST /shop/…` | the cart panel |
+| Pack history “Show older” | `GET /dm/history?before=…`, `GET /history?before=…` | replaces the button row with the next 50 entries |
 | Approve / decline / adjust cart | `POST /dm/carts/…` | that cart card, plus the sidebar badge |
 
 Messages are sent as an `HX-Trigger: {"qm-toast": …}` header and shown by `public/assets/app.js`. Errors come back as a 200 status with `HX-Reswap: none` and an error toast, because htmx won't swap 4xx responses. The CSRF token is sent on every htmx request via `hx-headers` on `<body>`.
@@ -80,4 +95,4 @@ Messages are sent as an `HX-Trigger: {"qm-toast": …}` header and shown by `pub
 - Every POST is CSRF-checked.
 - All SQL uses prepared statements.
 - All output is escaped with `e()`.
-- Players can only see their own pack and carts, and only the stores the DM has opened to them.
+- Players can only see their own pack, history and carts, and only the stores the DM has opened to them.

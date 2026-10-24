@@ -29,6 +29,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     </a>
     <?= $nav('dashboard', '/dm', 'Dashboard') ?>
     <?= $nav('inventory', '/dm/inventory', 'Player inventories') ?>
+    <?= $nav('history', '/dm/history', 'Pack history') ?>
     <?= $nav('stores', '/dm/stores', 'Stores') ?>
     <?= $nav('catalog', '/dm/catalog', 'Item catalog') ?>
     <?= $nav('carts', '/dm/carts', 'Cart review', render('partials/cart_badge_oob', ['inline' => true])) ?>
@@ -50,6 +51,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
       <nav class="topnav" aria-label="Player">
         <?= $nav('shop', '/shop', 'Shops') ?>
         <?= $nav('pack', '/pack', 'My pack') ?>
+        <?= $nav('history', '/history', 'History') ?>
       </nav>
     </div>
     <div class="topbar-right">

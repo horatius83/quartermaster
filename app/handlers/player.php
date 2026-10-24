@@ -181,3 +181,14 @@ function player_pack(): void
         'orders'  => array_map(fn($o) => cart_detail((int)$o['id']), $orders),
     ], 'My pack');
 }
+
+function player_history(): void
+{
+    $char = require_player();
+    $rows = inventory_log_rows((int)$char['id'], (int)($_GET['before'] ?? 0));
+    $data = ['rows' => $rows, 'showCharacter' => false, 'path' => '/history'];
+    if (htmx_target() === 'log-more') {
+        fragment('partials/history_rows', $data);
+    }
+    page('player/history', $data + ['active' => 'history', 'char' => $char], 'Pack history');
+}
