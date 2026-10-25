@@ -12,6 +12,7 @@
     </nav>
     <form class="card card-dashed card-stack" method="post" action="<?= e(url('/dm/stores')) ?>">
       <?= csrf_field() ?>
+      <input type="hidden" name="from" value="<?= $store ? (int)$store['id'] : '' ?>">
       <label class="field">New store name <input name="name" required maxlength="100" placeholder="The Rusty Anvil" value="<?= e($old['name'] ?? '') ?>"></label>
       <label class="field">Kind of shop <input name="kind" maxlength="100" placeholder="Smithy" value="<?= e($old['kind'] ?? '') ?>"></label>
       <button class="btn btn-ghost" type="submit">+ Open a new store</button>

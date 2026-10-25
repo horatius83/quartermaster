@@ -40,14 +40,38 @@ test('a too-short password keeps the username but never echoes the password', as
   expect(await page.content()).not.toContain('tiny1');
 });
 
-test('a new store without a name keeps the kind of shop', async ({ page }) => {
+test('kept input waits for its own page, so another page in between can’t use it up', async ({ page }) => {
+  await signInAsDm(page);
+  await page.goto('/dm/party');
+  // Post the form without following the redirect, as if the DM looked at another tab before it loaded.
+  const csrf = await page.locator('input[name="_csrf"]').first().inputValue();
+  const response = await page.request.post('/dm/party', {
+    form: { _csrf: csrf, name: 'Ilse Varn', class_label: 'Wizard 3', carry_capacity: '90', username: 'bryn', password: 'secret99' },
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBe(303);
+
+  await page.goto('/dm');
+  await page.goto('/dm/party');
+  await expect(page.getByLabel('Character name')).toHaveValue('Ilse Varn');
+  await expect(page.getByLabel('Carry (lb)')).toHaveValue('90');
+
+  await page.reload();
+  await expect(page.getByLabel('Character name')).toHaveValue('');
+});
+
+test('a new store without a name keeps the kind of shop and stays on the same store', async ({ page }) => {
   await signInAsDm(page);
   await page.goto('/dm/stores');
+  // Open a store other than the first, which is where /dm/stores itself lands.
+  const storeUrl = await page.getByRole('navigation', { name: 'Stores' }).getByRole('link').nth(1).getAttribute('href');
+  await page.goto(storeUrl!);
   // Whitespace passes the browser's required check but trims to nothing on the server.
   await page.getByLabel('New store name').fill('   ');
   await page.getByLabel('Kind of shop').first().fill('Apothecary');
   await page.getByRole('button', { name: '+ Open a new store' }).click();
 
   await expect(page.getByText('Give the store a name.')).toBeVisible();
+  await expect(page).toHaveURL(storeUrl);
   await expect(page.getByLabel('Kind of shop').first()).toHaveValue('Apothecary');
 });

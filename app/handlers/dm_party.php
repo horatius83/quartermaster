@@ -50,11 +50,20 @@ function dm_party_create(): void
     $password = (string)($_POST['password'] ?? '');
     $capacity = post_float('carry_capacity', 150);
 
+    // What a failed submit brings back. Never the password; a taken username is left out where it's the problem.
+    $keep = ['name', 'class_label', 'carry_capacity', 'username'];
+    $taken = fn() => back_with_error('/dm/party', "The username “{$username}” is already taken.", array_diff($keep, ['username']));
+
     if ($name === '') {
-        back_with_error('/dm/party', 'Give the character a name.');
+        back_with_error('/dm/party', 'Give the character a name.', $keep);
     }
     if ($username !== '' && strlen($password) < 6) {
-        back_with_error('/dm/party', 'Player passwords need at least 6 characters.');
+        back_with_error('/dm/party', 'Player passwords need at least 6 characters.', $keep);
+    }
+    // A quick check saves hashing a password for a name we already know is taken; the unique key below
+    // still has the final say when two submits race for the same username.
+    if ($username !== '' && username_taken($username)) {
+        $taken();
     }
 
     try {
@@ -72,11 +81,10 @@ function dm_party_create(): void
             );
         });
     } catch (PDOException $e) {
-        // Let the unique key decide, so two submits racing for one username can't both get past a check.
-        if ($username === '' || !q_val('SELECT id FROM users WHERE username = ?', [$username])) {
+        if ($username === '' || !username_taken($username)) {
             throw $e;
         }
-        back_with_error('/dm/party', "The username “{$username}” is already taken.", ['username']);
+        $taken();
     }
 
     flash("{$name} has joined the party.");
@@ -101,16 +109,24 @@ function dm_party_password(int $characterId): void
         if ($username === '') {
             htmx_fail('Enter a username for this player.');
         }
-        if (q_val('SELECT id FROM users WHERE username = ?', [$username])) {
+        if (username_taken($username)) {
             htmx_fail("The username “{$username}” is already taken.");
         }
-        transaction(function () use ($username, $password, $characterId) {
-            $userId = insert(
-                "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
-                [$username, password_hash($password, PASSWORD_DEFAULT), now()]
-            );
-            q('UPDATE characters SET user_id = ? WHERE id = ?', [$userId, $characterId]);
-        });
+        try {
+            transaction(function () use ($username, $password, $characterId) {
+                $userId = insert(
+                    "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
+                    [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+                );
+                q('UPDATE characters SET user_id = ? WHERE id = ?', [$userId, $characterId]);
+            });
+        } catch (PDOException $e) {
+            // Someone claimed the name between the check above and the insert.
+            if (!username_taken($username)) {
+                throw $e;
+            }
+            htmx_fail("The username “{$username}” is already taken.");
+        }
         toast("Login created for {$char['name']}.");
     }
 

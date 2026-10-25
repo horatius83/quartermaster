@@ -71,28 +71,60 @@ function take_flashes(): array
     return $f;
 }
 
-/**
- * Send a failed form submit back to $path with an error, keeping what was typed so it needn't be retyped.
- * Passwords and the CSRF token are never kept; $drop names other fields to leave out (e.g. a taken username).
- */
-function back_with_error(string $path, string $message, array $drop = []): never
+/** The request's path within the app, without the base path or query string (e.g. "/dm/party"). */
+function request_path(): string
 {
-    $fields = array_diff_key($_POST, array_flip(['_csrf', 'password', ...$drop]));
-    $fields = array_map(fn($v) => mb_substr($v, 0, 255), array_filter($fields, 'is_string'));
-    $_SESSION['old_input'] = ['fields' => $fields, 'at' => time()];
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+    $base = base_path();
+    if ($base !== '' && str_starts_with($path, $base)) {
+        $path = substr($path, strlen($base)) ?: '/';
+    }
+    return '/' . trim($path, '/');
+}
+
+/** How long input kept by back_with_error() waits for its page before it's thrown away. */
+const OLD_INPUT_TTL = 300;
+
+/**
+ * Send a failed form submit back to $path with an error, keeping the $keep fields so they needn't be retyped.
+ * Only fields named in $keep are kept, so a password or token can't end up in the session by accident.
+ * A field posted as a list (checkboxes, multi-selects) is kept as a list of strings.
+ */
+function back_with_error(string $path, string $message, array $keep): never
+{
+    $clip = fn($v) => mb_substr($v, 0, 255);
+    $fields = [];
+    foreach (array_intersect_key($_POST, array_flip($keep)) as $key => $value) {
+        if (is_string($value)) {
+            $fields[$key] = $clip($value);
+        } elseif (is_array($value)) {
+            $fields[$key] = array_map($clip, array_values(array_filter($value, 'is_string')));
+        }
+    }
+    $_SESSION['old_input'] = ['path' => '/' . trim($path, '/'), 'fields' => $fields, 'at' => time()];
     flash($message, 'error');
     redirect($path);
 }
 
 /**
- * Take the input kept by back_with_error(). The next full page render always takes it, so it can't turn up
- * on some later visit, and it's ignored once it's a few minutes old (e.g. the redirect never loaded).
+ * Take the input kept by back_with_error(), but only on the page it was sent back to: other pages (another
+ * tab, say) leave it alone. Once it's older than OLD_INPUT_TTL it's thrown away, so it can't turn up later.
  */
 function take_old_input(): array
 {
     $kept = $_SESSION['old_input'] ?? null;
+    if (!$kept) {
+        return [];
+    }
+    if (time() - $kept['at'] > OLD_INPUT_TTL) {
+        unset($_SESSION['old_input']);
+        return [];
+    }
+    if ($kept['path'] !== request_path()) {
+        return [];
+    }
     unset($_SESSION['old_input']);
-    return $kept && time() - $kept['at'] <= 300 ? $kept['fields'] : [];
+    return $kept['fields'];
 }
 
 /** Render a view file (relative to app/views, no extension) and return the HTML. */

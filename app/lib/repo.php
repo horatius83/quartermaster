@@ -103,6 +103,12 @@ function party_names(): array
     return q_all('SELECT id, name FROM characters WHERE campaign_id = ? ORDER BY name', [campaign_id()]);
 }
 
+/** Whether any login already uses $username (compared the way the unique key compares it). */
+function username_taken(string $username): bool
+{
+    return (bool)q_val('SELECT id FROM users WHERE username = ?', [$username]);
+}
+
 function character(int $id): ?array
 {
     return q_one('SELECT * FROM characters WHERE id = ? AND campaign_id = ?', [$id, campaign_id()]);

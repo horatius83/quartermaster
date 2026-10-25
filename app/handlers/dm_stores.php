@@ -16,7 +16,9 @@ function dm_store_create(): void
     require_dm();
     $name = post_str('name', 100);
     if ($name === '') {
-        back_with_error('/dm/stores', 'Give the store a name.');
+        // Back to the store page the form was on, not wherever /dm/stores would bounce to.
+        $from = store(post_int('from'));
+        back_with_error($from ? '/dm/stores/' . $from['id'] : '/dm/stores', 'Give the store a name.', ['name', 'kind']);
     }
     $id = insert(
         'INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 0, ?)',
