@@ -2,6 +2,66 @@
 declare(strict_types=1);
 
 // Shared queries used by several screens.
+// Characters, stores, carts and history belong to a campaign. The lookups below only see the current one
+// (the DM's chosen campaign, or a player's own), so an id from another campaign reads as "not found".
+
+function campaigns(): array
+{
+    return q_all(
+        'SELECT c.*,
+                (SELECT COUNT(*) FROM characters ch WHERE ch.campaign_id = c.id) AS character_count,
+                (SELECT COUNT(*) FROM stores s WHERE s.campaign_id = c.id) AS store_count
+           FROM campaigns c ORDER BY c.name, c.id'
+    );
+}
+
+/** Id and name of every campaign, for the sidebar's campaign menu. */
+function campaign_names(): array
+{
+    return q_all('SELECT id, name FROM campaigns ORDER BY name, id');
+}
+
+function campaign(int $id): ?array
+{
+    return q_one('SELECT * FROM campaigns WHERE id = ?', [$id]);
+}
+
+function create_campaign(string $name): int
+{
+    return insert('INSERT INTO campaigns (name, created_at) VALUES (?, ?)', [$name, now()]);
+}
+
+/** The campaign being viewed: the one the DM last picked (or the first), or the player's character's. */
+function current_campaign(): ?array
+{
+    static $cached = false;
+    if ($cached !== false) {
+        return $cached;
+    }
+    $user = current_user();
+    if (!$user) {
+        return null; // not cached: login may happen later in this request
+    }
+    if ($user['role'] === 'player') {
+        return $cached = q_one('SELECT cp.* FROM campaigns cp JOIN characters ch ON ch.campaign_id = cp.id WHERE ch.user_id = ?', [$user['id']]);
+    }
+    $campaign = campaign((int)($_SESSION['campaign_id'] ?? 0))
+        ?? q_one('SELECT * FROM campaigns ORDER BY id LIMIT 1')
+        ?? campaign(create_campaign('My Campaign'));
+    $_SESSION['campaign_id'] = (int)$campaign['id'];
+    return $cached = $campaign;
+}
+
+function campaign_id(): int
+{
+    return (int)(current_campaign()['id'] ?? 0);
+}
+
+/** The DM picks which campaign the other DM screens show. */
+function switch_campaign(int $id): void
+{
+    $_SESSION['campaign_id'] = $id;
+}
 
 function categories(): array
 {
@@ -30,14 +90,22 @@ function characters_with_load(): array
            LEFT JOIN users u ON u.id = c.user_id
            LEFT JOIN inventory inv ON inv.character_id = c.id
            LEFT JOIN items i ON i.id = inv.item_id
-          GROUP BY c.id, c.user_id, c.name, c.class_label, c.coin_cp, c.carry_capacity, c.created_at, u.username
-          ORDER BY c.name'
+          WHERE c.campaign_id = ?
+          GROUP BY c.id, c.campaign_id, c.user_id, c.name, c.class_label, c.coin_cp, c.carry_capacity, c.created_at, u.username
+          ORDER BY c.name',
+        [campaign_id()]
     );
+}
+
+/** Id and name of everyone in the current campaign's party, for pickers. */
+function party_names(): array
+{
+    return q_all('SELECT id, name FROM characters WHERE campaign_id = ? ORDER BY name', [campaign_id()]);
 }
 
 function character(int $id): ?array
 {
-    return q_one('SELECT * FROM characters WHERE id = ?', [$id]);
+    return q_one('SELECT * FROM characters WHERE id = ? AND campaign_id = ?', [$id, campaign_id()]);
 }
 
 function inventory_rows(int $characterId, string $categorySlug = ''): array
@@ -65,8 +133,9 @@ function inventory_row(int $rowId): ?array
            FROM inventory inv
            JOIN items i ON i.id = inv.item_id
            JOIN categories cat ON cat.id = i.category_id
-          WHERE inv.id = ?',
-        [$rowId]
+           JOIN characters ch ON ch.id = inv.character_id
+          WHERE inv.id = ? AND ch.campaign_id = ?',
+        [$rowId, campaign_id()]
     );
 }
 
@@ -122,22 +191,22 @@ function log_inventory(int $characterId, string $action, ?array $item = null, in
     }
 
     q(
-        'INSERT INTO inventory_log (character_id, character_name, actor_user_id, actor_name, action, item_id, item_name, notes, quantity, coin_cp, detail, created_at)
-         SELECT id, name, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM characters WHERE id = ?',
+        'INSERT INTO inventory_log (campaign_id, character_id, character_name, actor_user_id, actor_name, action, item_id, item_name, notes, quantity, coin_cp, detail, created_at)
+         SELECT campaign_id, id, name, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM characters WHERE id = ?',
         [$actor['id'] ?? null, $actor['username'] ?? '', $action, $itemId, $item['name'] ?? '',
          $notes, $qty, $coinCp, mb_substr($detail, 0, 255), now(), $characterId]
     );
 }
 
 /**
- * Pack history, newest first, one page at a time. $characterId null = the whole party,
+ * Pack history, newest first, one page at a time. $characterId null = the current campaign's whole party,
  * including characters who have since been deleted.
  * @return array{0: array, 1: bool} the rows, and whether older ones exist
  */
 function inventory_log_page(?int $characterId, int $beforeId = 0): array
 {
-    $sql = 'SELECT * FROM inventory_log WHERE 1 = 1';
-    $params = [];
+    $sql = 'SELECT * FROM inventory_log WHERE campaign_id = ?';
+    $params = [campaign_id()];
     if ($characterId !== null) {
         $sql .= ' AND character_id = ?';
         $params[] = $characterId;
@@ -176,13 +245,14 @@ function stores_summary(): array
 {
     return q_all(
         'SELECT s.*, (SELECT COUNT(*) FROM store_stock st WHERE st.store_id = s.id) AS stock_count
-           FROM stores s ORDER BY s.name'
+           FROM stores s WHERE s.campaign_id = ? ORDER BY s.name',
+        [campaign_id()]
     );
 }
 
 function store(int $id): ?array
 {
-    return q_one('SELECT * FROM stores WHERE id = ?', [$id]);
+    return q_one('SELECT * FROM stores WHERE id = ? AND campaign_id = ?', [$id, campaign_id()]);
 }
 
 function store_stock_rows(int $storeId, string $categorySlug = ''): array
@@ -210,8 +280,9 @@ function stock_row(int $id): ?array
            FROM store_stock st
            JOIN items i ON i.id = st.item_id
            JOIN categories cat ON cat.id = i.category_id
-          WHERE st.id = ?',
-        [$id]
+           JOIN stores s ON s.id = st.store_id
+          WHERE st.id = ? AND s.campaign_id = ?',
+        [$id, campaign_id()]
     );
 }
 
@@ -227,16 +298,20 @@ function stores_for_character(int $characterId): array
     return q_all(
         'SELECT s.* FROM stores s
           WHERE s.is_open = 1
+            AND s.campaign_id = (SELECT campaign_id FROM characters WHERE id = ?)
             AND (NOT EXISTS (SELECT 1 FROM store_access a WHERE a.store_id = s.id)
                  OR EXISTS (SELECT 1 FROM store_access a WHERE a.store_id = s.id AND a.character_id = ?))
           ORDER BY s.name',
-        [$characterId]
+        [$characterId, $characterId]
     );
 }
 
 function pending_cart_count(): int
 {
-    return (int)q_val("SELECT COUNT(*) FROM carts WHERE status = 'submitted'");
+    return (int)q_val(
+        "SELECT COUNT(*) FROM carts c JOIN characters ch ON ch.id = c.character_id WHERE c.status = 'submitted' AND ch.campaign_id = ?",
+        [campaign_id()]
+    );
 }
 
 /** A cart with its lines, total, character and store. */
@@ -247,8 +322,8 @@ function cart_detail(int $cartId): ?array
            FROM carts c
            JOIN characters ch ON ch.id = c.character_id
            JOIN stores s ON s.id = c.store_id
-          WHERE c.id = ?',
-        [$cartId]
+          WHERE c.id = ? AND ch.campaign_id = ?',
+        [$cartId, campaign_id()]
     );
     if (!$cart) {
         return null;

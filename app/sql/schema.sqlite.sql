@@ -9,8 +9,16 @@ CREATE TABLE users (
   created_at    TEXT NOT NULL
 );
 
+-- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
+CREATE TABLE campaigns (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE characters (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id    INTEGER NOT NULL REFERENCES campaigns(id),
   user_id        INTEGER NULL UNIQUE REFERENCES users(id) ON DELETE SET NULL,
   name           TEXT NOT NULL,
   class_label    TEXT NOT NULL DEFAULT '',
@@ -44,7 +52,8 @@ CREATE TABLE inventory (
 );
 
 CREATE TABLE stores (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id),
   name       TEXT NOT NULL,
   kind       TEXT NOT NULL DEFAULT '',
   blurb      TEXT NOT NULL DEFAULT '',
@@ -92,6 +101,7 @@ CREATE TABLE cart_items (
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id   INTEGER NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   character_id  INTEGER NULL REFERENCES characters(id) ON DELETE SET NULL,
   character_name TEXT NOT NULL DEFAULT '',
   actor_user_id INTEGER NULL,
@@ -105,6 +115,7 @@ CREATE TABLE inventory_log (
   detail        TEXT NOT NULL DEFAULT '',
   created_at    TEXT NOT NULL
 );
+CREATE INDEX ix_inventory_log_campaign ON inventory_log (campaign_id, id);
 CREATE INDEX ix_inventory_log_character ON inventory_log (character_id, id);
 
 INSERT INTO categories (name, slug, sort_order) VALUES

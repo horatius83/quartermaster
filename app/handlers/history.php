@@ -6,7 +6,7 @@ function dm_history(): void
     require_dm();
     history_page(null, '/dm/history', 'dm/history', [
         'char'       => null,
-        'characters' => q_all('SELECT id, name FROM characters ORDER BY name'),
+        'characters' => party_names(),
     ], 'Pack history');
 }
 
@@ -16,7 +16,7 @@ function dm_history_character(int $characterId): void
     $char = character($characterId) ?? abort(404, 'No such character.');
     history_page($characterId, '/dm/history/' . $characterId, 'dm/history', [
         'char'       => $char,
-        'characters' => q_all('SELECT id, name FROM characters ORDER BY name'),
+        'characters' => party_names(),
     ], $char['name'] . '’s history');
 }
 

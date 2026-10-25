@@ -1,7 +1,7 @@
 <main class="main">
   <header class="page-head">
     <div>
-      <p class="muted" style="margin:0"><?= e(config('campaign_name', '')) ?></p>
+      <p class="muted" style="margin:0"><?= e($campaign['name']) ?></p>
       <h1 class="page-title">The Party Ledger</h1>
     </div>
     <div class="actions">

@@ -13,9 +13,10 @@ function dm_dashboard(): void
            JOIN characters ch ON ch.id = c.character_id
            JOIN stores s ON s.id = c.store_id
            LEFT JOIN cart_items ci ON ci.cart_id = c.id
-          WHERE c.status = 'submitted'
+          WHERE c.status = 'submitted' AND ch.campaign_id = ?
           GROUP BY c.id, ch.name, s.name, c.submitted_at
-          ORDER BY c.submitted_at"
+          ORDER BY c.submitted_at",
+        [campaign_id()]
     );
     $stores = stores_summary();
     $partyCoin = array_sum(array_map(fn($c) => (int)$c['coin_cp'], $characters));
@@ -27,6 +28,7 @@ function dm_dashboard(): void
         'stores'     => $stores,
         'openStores' => count(array_filter($stores, fn($s) => (int)$s['is_open'] === 1)),
         'partyCoin'  => $partyCoin,
+        'campaign'   => current_campaign(),
     ], 'Dashboard');
 }
 
@@ -70,8 +72,8 @@ function dm_party_create(): void
             );
         }
         insert(
-            'INSERT INTO characters (user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, 0, ?, ?)',
-            [$userId, $name, $class, max(0, $capacity), now()]
+            'INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+            [campaign_id(), $userId, $name, $class, max(0, $capacity), now()]
         );
     });
 

@@ -24,8 +24,20 @@ export const phpEnv: Record<string, string> = {
   WSLENV: [process.env.WSLENV, 'QM_CONFIG/p'].filter(Boolean).join(':'),
 };
 
-/** Wipe the test database and reload the demo seed. */
-export function resetDatabase(): void {
+/** Wipe the test database and reload the demo seed, or leave it empty for a fresh install. */
+export function resetDatabase({ empty = false } = {}): void {
   const [cmd, ...args] = phpCommand();
-  execFileSync(cmd, [...args, 'tests/e2e/reset.php'], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+  execFileSync(cmd, [...args, 'tests/e2e/reset.php', ...(empty ? ['--empty'] : [])], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+}
+
+/** Run tests/e2e/upgrade-check.php and return what it reports about the upgraded database. */
+export function upgradeOldDatabase(statementsAlreadyRun = 0): {
+  campaigns: { id: number; name: string }[];
+  characters: number[];
+  stores: number[];
+  log: number[];
+} {
+  const [cmd, ...args] = phpCommand();
+  const out = execFileSync(cmd, [...args, 'tests/e2e/upgrade-check.php', String(statementsAlreadyRun)], { cwd: ROOT, stdio: 'pipe' });
+  return JSON.parse(out.toString());
 }
