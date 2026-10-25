@@ -50,15 +50,21 @@ function dm_party_create(): void
     $password = (string)($_POST['password'] ?? '');
     $capacity = post_float('carry_capacity', 150);
 
+    // On a validation error, bring back what the DM typed (never the password, nor a username that's taken).
+    $kept = ['name' => $name, 'class_label' => $class, 'carry_capacity' => $capacity, 'username' => $username];
+
     if ($name === '') {
+        remember_input($kept);
         flash('Give the character a name.', 'error');
         redirect('/dm/party');
     }
     if ($username !== '' && strlen($password) < 6) {
+        remember_input($kept);
         flash('Player passwords need at least 6 characters.', 'error');
         redirect('/dm/party');
     }
     if ($username !== '' && q_val('SELECT id FROM users WHERE username = ?', [$username])) {
+        remember_input(['username' => ''] + $kept);
         flash("The username “{$username}” is already taken.", 'error');
         redirect('/dm/party');
     }

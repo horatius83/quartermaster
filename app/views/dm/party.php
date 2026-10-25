@@ -9,18 +9,18 @@
     <h2 class="section-title" style="font-size:28px">Add an adventurer</h2>
     <div class="form-row">
       <label class="field grow">Character name
-        <input name="name" required maxlength="100" placeholder="e.g. Bryn Ashvale">
+        <input name="name" required maxlength="100" placeholder="e.g. Bryn Ashvale" value="<?= e(old('name')) ?>">
       </label>
       <label class="field mid">Class &amp; level
-        <input name="class_label" maxlength="100" placeholder="Fighter 5">
+        <input name="class_label" maxlength="100" placeholder="Fighter 5" value="<?= e(old('class_label')) ?>">
       </label>
       <label class="field tiny">Carry (lb)
-        <input name="carry_capacity" type="number" min="0" step="1" value="150">
+        <input name="carry_capacity" type="number" min="0" step="1" value="<?= e(old('carry_capacity', '150')) ?>">
       </label>
     </div>
     <div class="form-row">
       <label class="field mid">Player username
-        <input name="username" maxlength="50" autocomplete="off" placeholder="Leave blank for an NPC or hireling">
+        <input name="username" maxlength="50" autocomplete="off" placeholder="Leave blank for an NPC or hireling" value="<?= e(old('username')) ?>">
       </label>
       <label class="field mid">Temporary password
         <input name="password" type="text" minlength="6" autocomplete="off">

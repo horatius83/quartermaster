@@ -71,6 +71,23 @@ function take_flashes(): array
     return $f;
 }
 
+/** Keep form values across a redirect so a failed submit doesn't make the user retype them. */
+function remember_input(array $fields): void
+{
+    $_SESSION['old_input'] = $fields;
+}
+
+/** A value kept by remember_input(); the whole set is used up by the first request that reads it. */
+function old(string $key, string $default = ''): string
+{
+    static $old = null;
+    if ($old === null) {
+        $old = $_SESSION['old_input'] ?? [];
+        unset($_SESSION['old_input']);
+    }
+    return isset($old[$key]) ? (string)$old[$key] : $default;
+}
+
 /** Render a view file (relative to app/views, no extension) and return the HTML. */
 function render(string $view, array $data = []): string
 {
