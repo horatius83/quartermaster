@@ -75,10 +75,4 @@ $routes = [
     ['GET',  '/history',                   'player_history'],
 ];
 
-$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-$base = base_path();
-if ($base !== '' && str_starts_with($path, $base)) {
-    $path = substr($path, strlen($base)) ?: '/';
-}
-
-dispatch($routes, $_SERVER['REQUEST_METHOD'] ?? 'GET', $path);
+dispatch($routes, $_SERVER['REQUEST_METHOD'] ?? 'GET', request_path());

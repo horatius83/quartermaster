@@ -45,7 +45,7 @@ function setup_form(): void
     if ((int)q_val('SELECT COUNT(*) FROM users') > 0) {
         redirect('/login');
     }
-    page('auth/setup', ['error' => null, 'campaign' => ''], 'Set up Quartermaster');
+    page('auth/setup', [], 'Set up Quartermaster');
 }
 
 function setup_submit(): void
@@ -57,7 +57,7 @@ function setup_submit(): void
     $password = (string)($_POST['password'] ?? '');
     $campaign = post_str('campaign', 100);
     if ($username === '' || strlen($password) < 8 || $campaign === '') {
-        page('auth/setup', ['error' => 'Pick a username, a password of at least 8 characters and a campaign name.', 'campaign' => $campaign], 'Set up Quartermaster');
+        back_with_error('/setup', 'Pick a username, a password of at least 8 characters and a campaign name.', ['username', 'campaign']);
     }
     [$id, $campaignId] = transaction(function () use ($username, $password, $campaign) {
         $id = insert(

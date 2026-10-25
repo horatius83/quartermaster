@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, toasts } from './fixtures';
 import { resetDatabase, upgradeOldDatabase } from './php';
 
 // An install from before campaigns: everything it had moves into one campaign named from config.php.
@@ -22,6 +22,19 @@ test('a fresh install names its first campaign during setup', async ({ page }) =
   resetDatabase({ empty: true });
   await page.goto('/');
   await expect(page).toHaveURL(/\/setup$/);
+  // A too-short password comes back with the username and campaign still filled in.
+  await page.getByLabel('DM username').fill('dm');
+  await page.getByLabel('Password (8+ characters)').evaluate((el) => el.removeAttribute('minlength'));
+  await page.getByLabel('Password (8+ characters)').fill('short');
+  await page.getByLabel('Campaign name').fill('Shadows over Brindle');
+  await page.getByRole('button', { name: 'Create DM account' }).click();
+  // The error stays on the card as an alert instead of a toast that fades away.
+  await expect(page.getByRole('alert')).toContainText('Pick a username, a password of at least 8 characters');
+  await expect(toasts(page)).not.toContainText('Pick a username');
+  await expect(page.getByLabel('DM username')).toHaveValue('dm');
+  await expect(page.getByLabel('Campaign name')).toHaveValue('Shadows over Brindle');
+  await expect(page.getByLabel('Password (8+ characters)')).toHaveValue('');
+
   await page.getByLabel('DM username').fill('dm');
   await page.getByLabel('Password (8+ characters)').fill('dungeon123');
   await page.getByLabel('Campaign name').fill('Shadows over Brindle');

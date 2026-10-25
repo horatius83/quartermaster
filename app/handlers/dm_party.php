@@ -50,32 +50,42 @@ function dm_party_create(): void
     $password = (string)($_POST['password'] ?? '');
     $capacity = post_float('carry_capacity', 150);
 
+    // What a failed submit brings back. Never the password; a taken username is left out where it's the problem.
+    $keep = ['name', 'class_label', 'carry_capacity', 'username'];
+    $taken = fn() => back_with_error('/dm/party', "The username “{$username}” is already taken.", array_diff($keep, ['username']));
+
     if ($name === '') {
-        flash('Give the character a name.', 'error');
-        redirect('/dm/party');
+        back_with_error('/dm/party', 'Give the character a name.', $keep);
     }
     if ($username !== '' && strlen($password) < 6) {
-        flash('Player passwords need at least 6 characters.', 'error');
-        redirect('/dm/party');
+        back_with_error('/dm/party', 'Player passwords need at least 6 characters.', $keep);
     }
-    if ($username !== '' && q_val('SELECT id FROM users WHERE username = ?', [$username])) {
-        flash("The username “{$username}” is already taken.", 'error');
-        redirect('/dm/party');
+    // A quick check saves hashing a password for a name we already know is taken; the unique key below
+    // still has the final say when two submits race for the same username.
+    if ($username !== '' && username_taken($username)) {
+        $taken();
     }
 
-    transaction(function () use ($name, $class, $username, $password, $capacity) {
-        $userId = null;
-        if ($username !== '') {
-            $userId = insert(
-                "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
-                [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+    try {
+        transaction(function () use ($name, $class, $username, $password, $capacity) {
+            $userId = null;
+            if ($username !== '') {
+                $userId = insert(
+                    "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
+                    [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+                );
+            }
+            insert(
+                'INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+                [campaign_id(), $userId, $name, $class, max(0, $capacity), now()]
             );
+        });
+    } catch (PDOException $e) {
+        if ($username === '' || !username_taken($username)) {
+            throw $e;
         }
-        insert(
-            'INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
-            [campaign_id(), $userId, $name, $class, max(0, $capacity), now()]
-        );
-    });
+        $taken();
+    }
 
     flash("{$name} has joined the party.");
     redirect('/dm/party');
@@ -99,17 +109,33 @@ function dm_party_password(int $characterId): void
         if ($username === '') {
             htmx_fail('Enter a username for this player.');
         }
-        if (q_val('SELECT id FROM users WHERE username = ?', [$username])) {
+        if (username_taken($username)) {
             htmx_fail("The username “{$username}” is already taken.");
         }
-        transaction(function () use ($username, $password, $characterId) {
-            $userId = insert(
-                "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
-                [$username, password_hash($password, PASSWORD_DEFAULT), now()]
-            );
-            q('UPDATE characters SET user_id = ? WHERE id = ?', [$userId, $characterId]);
-        });
-        toast("Login created for {$char['name']}.");
+        try {
+            transaction(function () use ($username, $password, $characterId) {
+                $userId = insert(
+                    "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
+                    [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+                );
+                // Only link a character that still has no login, so a second submit racing this one
+                // can't leave the first login behind with no character.
+                $linked = q('UPDATE characters SET user_id = ? WHERE id = ? AND user_id IS NULL', [$userId, $characterId]);
+                if ($linked->rowCount() === 0) {
+                    throw new DomainException('Character already has a login.'); // rolls back the new user
+                }
+            });
+            toast("Login created for {$char['name']}.");
+        } catch (DomainException) {
+            // Show the row as it is now, with the login the other submit made.
+            toast("{$char['name']} already has a login. Use the form to reset its password.", 'error');
+        } catch (PDOException $e) {
+            // Someone claimed the name between the check above and the insert.
+            if (!username_taken($username)) {
+                throw $e;
+            }
+            htmx_fail("The username “{$username}” is already taken.");
+        }
     }
 
     $row = null;
