@@ -118,8 +118,17 @@ function dm_party_password(int $characterId): void
                     "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
                     [$username, password_hash($password, PASSWORD_DEFAULT), now()]
                 );
-                q('UPDATE characters SET user_id = ? WHERE id = ?', [$userId, $characterId]);
+                // Only link a character that still has no login, so a second submit racing this one
+                // can't leave the first login behind with no character.
+                $linked = q('UPDATE characters SET user_id = ? WHERE id = ? AND user_id IS NULL', [$userId, $characterId]);
+                if ($linked->rowCount() === 0) {
+                    throw new DomainException('Character already has a login.'); // rolls back the new user
+                }
             });
+            toast("Login created for {$char['name']}.");
+        } catch (DomainException) {
+            // Show the row as it is now, with the login the other submit made.
+            toast("{$char['name']} already has a login. Use the form to reset its password.", 'error');
         } catch (PDOException $e) {
             // Someone claimed the name between the check above and the insert.
             if (!username_taken($username)) {
@@ -127,7 +136,6 @@ function dm_party_password(int $characterId): void
             }
             htmx_fail("The username “{$username}” is already taken.");
         }
-        toast("Login created for {$char['name']}.");
     }
 
     $row = null;

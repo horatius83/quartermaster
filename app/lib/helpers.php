@@ -64,11 +64,18 @@ function flash(string $message, string $kind = 'ok'): void
     $_SESSION['flash'][] = ['message' => $message, 'kind' => $kind];
 }
 
-function take_flashes(): array
+/** Take the queued flash messages, or only those of one $kind (leaving the rest for the layout's toasts). */
+function take_flashes(?string $kind = null): array
 {
-    $f = $_SESSION['flash'] ?? [];
-    unset($_SESSION['flash']);
-    return $f;
+    $all = $_SESSION['flash'] ?? [];
+    $taken = $kind === null ? $all : array_values(array_filter($all, fn($f) => $f['kind'] === $kind));
+    $left = $kind === null ? [] : array_values(array_filter($all, fn($f) => $f['kind'] !== $kind));
+    if ($left) {
+        $_SESSION['flash'] = $left;
+    } else {
+        unset($_SESSION['flash']);
+    }
+    return $taken;
 }
 
 /** The request's path within the app, without the base path or query string (e.g. "/dm/party"). */

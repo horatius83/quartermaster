@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, toasts } from './fixtures';
 import { resetDatabase, upgradeOldDatabase } from './php';
 
 // An install from before campaigns: everything it had moves into one campaign named from config.php.
@@ -28,7 +28,9 @@ test('a fresh install names its first campaign during setup', async ({ page }) =
   await page.getByLabel('Password (8+ characters)').fill('short');
   await page.getByLabel('Campaign name').fill('Shadows over Brindle');
   await page.getByRole('button', { name: 'Create DM account' }).click();
-  await expect(page.getByText('Pick a username, a password of at least 8 characters')).toBeVisible();
+  // The error stays on the card as an alert instead of a toast that fades away.
+  await expect(page.getByRole('alert')).toContainText('Pick a username, a password of at least 8 characters');
+  await expect(toasts(page)).not.toContainText('Pick a username');
   await expect(page.getByLabel('DM username')).toHaveValue('dm');
   await expect(page.getByLabel('Campaign name')).toHaveValue('Shadows over Brindle');
   await expect(page.getByLabel('Password (8+ characters)')).toHaveValue('');
