@@ -71,21 +71,28 @@ function take_flashes(): array
     return $f;
 }
 
-/** Keep form values across a redirect so a failed submit doesn't make the user retype them. */
-function remember_input(array $fields): void
+/**
+ * Send a failed form submit back to $path with an error, keeping what was typed so it needn't be retyped.
+ * Passwords and the CSRF token are never kept; $drop names other fields to leave out (e.g. a taken username).
+ */
+function back_with_error(string $path, string $message, array $drop = []): never
 {
-    $_SESSION['old_input'] = $fields;
+    $fields = array_diff_key($_POST, array_flip(['_csrf', 'password', ...$drop]));
+    $fields = array_map(fn($v) => mb_substr($v, 0, 255), array_filter($fields, 'is_string'));
+    $_SESSION['old_input'] = ['fields' => $fields, 'at' => time()];
+    flash($message, 'error');
+    redirect($path);
 }
 
-/** A value kept by remember_input(); the whole set is used up by the first request that reads it. */
-function old(string $key, string $default = ''): string
+/**
+ * Take the input kept by back_with_error(). The next full page render always takes it, so it can't turn up
+ * on some later visit, and it's ignored once it's a few minutes old (e.g. the redirect never loaded).
+ */
+function take_old_input(): array
 {
-    static $old = null;
-    if ($old === null) {
-        $old = $_SESSION['old_input'] ?? [];
-        unset($_SESSION['old_input']);
-    }
-    return isset($old[$key]) ? (string)$old[$key] : $default;
+    $kept = $_SESSION['old_input'] ?? null;
+    unset($_SESSION['old_input']);
+    return $kept && time() - $kept['at'] <= 300 ? $kept['fields'] : [];
 }
 
 /** Render a view file (relative to app/views, no extension) and return the HTML. */
@@ -97,10 +104,10 @@ function render(string $view, array $data = []): string
     return (string)ob_get_clean();
 }
 
-/** Render a full page inside the layout. */
+/** Render a full page inside the layout. Views get $old: input kept from a failed form submit, if any. */
 function page(string $view, array $data = [], string $title = 'Quartermaster'): never
 {
-    $content = render($view, $data);
+    $content = render($view, $data + ['old' => take_old_input()]);
     echo render('layout', ['content' => $content, 'title' => $title, 'active' => $data['active'] ?? '']);
     exit;
 }

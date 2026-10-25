@@ -50,38 +50,34 @@ function dm_party_create(): void
     $password = (string)($_POST['password'] ?? '');
     $capacity = post_float('carry_capacity', 150);
 
-    // On a validation error, bring back what the DM typed (never the password, nor a username that's taken).
-    $kept = ['name' => $name, 'class_label' => $class, 'carry_capacity' => $capacity, 'username' => $username];
-
     if ($name === '') {
-        remember_input($kept);
-        flash('Give the character a name.', 'error');
-        redirect('/dm/party');
+        back_with_error('/dm/party', 'Give the character a name.');
     }
     if ($username !== '' && strlen($password) < 6) {
-        remember_input($kept);
-        flash('Player passwords need at least 6 characters.', 'error');
-        redirect('/dm/party');
-    }
-    if ($username !== '' && q_val('SELECT id FROM users WHERE username = ?', [$username])) {
-        remember_input(['username' => ''] + $kept);
-        flash("The username “{$username}” is already taken.", 'error');
-        redirect('/dm/party');
+        back_with_error('/dm/party', 'Player passwords need at least 6 characters.');
     }
 
-    transaction(function () use ($name, $class, $username, $password, $capacity) {
-        $userId = null;
-        if ($username !== '') {
-            $userId = insert(
-                "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
-                [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+    try {
+        transaction(function () use ($name, $class, $username, $password, $capacity) {
+            $userId = null;
+            if ($username !== '') {
+                $userId = insert(
+                    "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
+                    [$username, password_hash($password, PASSWORD_DEFAULT), now()]
+                );
+            }
+            insert(
+                'INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+                [campaign_id(), $userId, $name, $class, max(0, $capacity), now()]
             );
+        });
+    } catch (PDOException $e) {
+        // Let the unique key decide, so two submits racing for one username can't both get past a check.
+        if ($username === '' || !q_val('SELECT id FROM users WHERE username = ?', [$username])) {
+            throw $e;
         }
-        insert(
-            'INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
-            [campaign_id(), $userId, $name, $class, max(0, $capacity), now()]
-        );
-    });
+        back_with_error('/dm/party', "The username “{$username}” is already taken.", ['username']);
+    }
 
     flash("{$name} has joined the party.");
     redirect('/dm/party');

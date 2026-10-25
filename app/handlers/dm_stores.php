@@ -16,8 +16,7 @@ function dm_store_create(): void
     require_dm();
     $name = post_str('name', 100);
     if ($name === '') {
-        flash('Give the store a name.', 'error');
-        redirect('/dm/stores');
+        back_with_error('/dm/stores', 'Give the store a name.');
     }
     $id = insert(
         'INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 0, ?)',
