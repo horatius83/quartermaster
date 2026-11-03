@@ -7,16 +7,20 @@ CREATE TABLE users (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   username      VARCHAR(50)  NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role          ENUM('dm','player') NOT NULL,
+  role          ENUM('admin','dm','player') NOT NULL,
   created_at    DATETIME NOT NULL,
   UNIQUE KEY uq_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
+-- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.
 CREATE TABLE campaigns (
-  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  name       VARCHAR(100) NOT NULL,
-  created_at DATETIME NOT NULL
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  owner_user_id INT UNSIGNED NULL,
+  name          VARCHAR(100) NOT NULL,
+  created_at    DATETIME NOT NULL,
+  KEY ix_campaigns_owner (owner_user_id),
+  CONSTRAINT fk_campaigns_owner FOREIGN KEY (owner_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE characters (
@@ -145,6 +149,19 @@ CREATE TABLE inventory_log (
   KEY ix_inventory_log_character (character_id, id),
   CONSTRAINT fk_inventory_log_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
   CONSTRAINT fk_inventory_log_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every login created or deleted, and by whom. actor_name, username and role are copied in so the log survives deletions.
+CREATE TABLE user_log (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id INT UNSIGNED NULL,
+  actor_name    VARCHAR(50)  NOT NULL DEFAULT '',
+  action        VARCHAR(20)  NOT NULL,
+  user_id       INT UNSIGNED NULL,
+  username      VARCHAR(50)  NOT NULL DEFAULT '',
+  role          VARCHAR(10)  NOT NULL DEFAULT '',
+  detail        VARCHAR(255) NOT NULL DEFAULT '',
+  created_at    DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO categories (name, slug, sort_order) VALUES

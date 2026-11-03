@@ -77,12 +77,22 @@ function require_dm(): array
     return $user;
 }
 
+/** The admin manages logins only; it runs no campaigns. */
+function require_admin(): array
+{
+    $user = require_login();
+    if ($user['role'] !== 'admin') {
+        abort(403, 'Only the admin can do that.');
+    }
+    return $user;
+}
+
 /** Returns the logged-in player's character. */
 function require_player(): array
 {
     $user = require_login();
     if ($user['role'] !== 'player') {
-        redirect('/dm');
+        redirect('/');
     }
     $char = q_one('SELECT * FROM characters WHERE user_id = ?', [$user['id']]);
     if (!$char) {

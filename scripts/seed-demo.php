@@ -1,7 +1,7 @@
 <?php
 // Fills an EMPTY database with a sample party, catalog and stores so you can click around.
 // Run from the project root:  php scripts/seed-demo.php
-// Logins created: dm / dungeon123, and players bryn, tamsin, oskar, wren (password: adventure).
+// Logins created: admin / quartermaster, dm / dungeon123, and players bryn, tamsin, oskar, wren (password: adventure).
 // A second, smaller campaign has one player, sela (password: adventure), and one shop.
 declare(strict_types=1);
 
@@ -19,9 +19,10 @@ foreach (categories() as $c) {
 }
 
 transaction(function () use ($cat) {
-    insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('dm', ?, 'dm', ?)", [password_hash('dungeon123', PASSWORD_DEFAULT), now()]);
-    $campaign = create_campaign('The Sunken Crown');
-    $winter = create_campaign('Winter’s Teeth');
+    insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('admin', ?, 'admin', ?)", [password_hash('quartermaster', PASSWORD_DEFAULT), now()]);
+    $dm = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('dm', ?, 'dm', ?)", [password_hash('dungeon123', PASSWORD_DEFAULT), now()]);
+    $campaign = create_campaign('The Sunken Crown', $dm);
+    $winter = create_campaign('Winter’s Teeth', $dm);
 
     $party = [
         ['bryn',   'Bryn Ashvale',  'Fighter 5', 41200, 240],

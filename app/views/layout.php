@@ -49,6 +49,25 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <?= $nav('party', '/dm/party', 'Party & logins') ?>
     <div class="nav-rule"></div>
     <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
+    <?php if (!admin_exists()): ?><?= $nav('admin-account', '/dm/admin-account', 'Create the admin account') ?><?php endif; ?>
+    <form method="post" action="<?= e(url('/logout')) ?>">
+      <?= csrf_field() ?>
+      <button class="nav-link nav-button" type="submit">Sign out (<?= e($user['username']) ?>)</button>
+    </form>
+  </nav>
+  <?= $content ?>
+</div>
+<?php elseif ($user && $user['role'] === 'admin'): ?>
+<div class="shell">
+  <nav class="sidebar" aria-label="Main">
+    <a class="brand" href="<?= e(url('/admin/users')) ?>">
+      <?= render('partials/icon_pouch', []) ?>
+      <span>Quartermaster</span>
+    </a>
+    <p class="campaign-name">Admin</p>
+    <?= $nav('users', '/admin/users', 'Users') ?>
+    <?= $nav('log', '/admin/log', 'Account log') ?>
+    <div class="nav-rule"></div>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
       <button class="nav-link nav-button" type="submit">Sign out (<?= e($user['username']) ?>)</button>

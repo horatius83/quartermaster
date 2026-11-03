@@ -1,9 +1,12 @@
 import { test, expect, toasts } from './fixtures';
 import { resetDatabase, upgradeOldDatabase } from './php';
 
-// An install from before campaigns: everything it had moves into one campaign named from config.php.
+// An install from before campaigns: everything it had moves into one campaign named from config.php,
+// run by its DM (user 1). The admin role and the empty account log arrive too.
 const UPGRADED = {
-  campaigns: [{ id: 1, name: 'The Old Campaign' }],
+  campaigns: [{ id: 1, name: 'The Old Campaign', owner: 1 }],
+  admins: 2,
+  userLog: 0,
   characters: [1, 1],
   stores: [1],
   log: [1, 1],
@@ -11,6 +14,10 @@ const UPGRADED = {
 
 test('an old database upgrades itself into one campaign', () => {
   expect(upgradeOldDatabase()).toEqual(UPGRADED);
+});
+
+test('the admin upgrade stops, rather than half-finishing, when it can’t widen the role check', () => {
+  expect(() => upgradeOldDatabase(0, { oddRoleCheck: true })).toThrow(/CHECK constraint failed/);
 });
 
 test('an upgrade that stopped partway is finished on the next run', () => {

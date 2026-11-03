@@ -19,7 +19,7 @@ function dm_campaign_create(): void
         flash('Give the campaign a name.', 'error');
         redirect('/dm/campaigns');
     }
-    switch_campaign(create_campaign($name));
+    switch_campaign(create_campaign($name, owner_id()));
     flash("{$name} begins. Add its adventurers to get started.");
     redirect('/dm/party');
 }
@@ -57,14 +57,14 @@ function dm_campaign_delete(int $id): void
     require_dm();
     try {
         $campaign = transaction(function () use ($id) {
-            $campaign = q_one('SELECT * FROM campaigns WHERE id = ?' . for_update(), [$id]);
+            $campaign = q_one('SELECT * FROM campaigns WHERE id = ? AND owner_user_id = ?' . for_update(), [$id, owner_id()]);
             if (!$campaign) {
                 throw new RuntimeException('That campaign is already gone.');
             }
             if (q_val('SELECT 1 FROM characters WHERE campaign_id = ? UNION ALL SELECT 1 FROM stores WHERE campaign_id = ? LIMIT 1', [$id, $id])) {
                 throw new RuntimeException("Remove {$campaign['name']}’s characters and stores before deleting it.");
             }
-            if ((int)q_val('SELECT COUNT(*) FROM campaigns') === 1) {
+            if ((int)q_val('SELECT COUNT(*) FROM campaigns WHERE owner_user_id = ?', [owner_id()]) === 1) {
                 throw new RuntimeException('This is your only campaign, so it stays.');
             }
             q('DELETE FROM campaigns WHERE id = ?', [$id]);

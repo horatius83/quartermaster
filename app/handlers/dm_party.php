@@ -70,10 +70,7 @@ function dm_party_create(): void
         transaction(function () use ($name, $class, $username, $password, $capacity) {
             $userId = null;
             if ($username !== '') {
-                $userId = insert(
-                    "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
-                    [$username, password_hash($password, PASSWORD_DEFAULT), now()]
-                );
+                $userId = create_login($username, $password, 'player', "Player for {$name} in " . current_campaign()['name']);
             }
             insert(
                 'INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
@@ -113,11 +110,9 @@ function dm_party_password(int $characterId): void
             htmx_fail("The username “{$username}” is already taken.");
         }
         try {
-            transaction(function () use ($username, $password, $characterId) {
-                $userId = insert(
-                    "INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)",
-                    [$username, password_hash($password, PASSWORD_DEFAULT), now()]
-                );
+            transaction(function () use ($username, $password, $char) {
+                $characterId = (int)$char['id'];
+                $userId = create_login($username, $password, 'player', "Player for {$char['name']} in " . current_campaign()['name']);
                 // Only link a character that still has no login, so a second submit racing this one
                 // can't leave the first login behind with no character.
                 $linked = q('UPDATE characters SET user_id = ? WHERE id = ? AND user_id IS NULL', [$userId, $characterId]);
@@ -153,8 +148,9 @@ function dm_party_delete(int $characterId): void
     $char = character($characterId) ?? abort(404, 'No such character.');
     transaction(function () use ($char) {
         q('DELETE FROM characters WHERE id = ?', [$char['id']]);
-        if ($char['user_id']) {
-            q("DELETE FROM users WHERE id = ? AND role = 'player'", [$char['user_id']]);
+        $login = $char['user_id'] ? q_one("SELECT id, username, role FROM users WHERE id = ? AND role = 'player'", [$char['user_id']]) : null;
+        if ($login) {
+            delete_login($login, "{$char['name']} left " . current_campaign()['name']);
         }
     });
     toast("{$char['name']} has left the party.");

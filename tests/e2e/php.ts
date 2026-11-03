@@ -31,13 +31,15 @@ export function resetDatabase({ empty = false } = {}): void {
 }
 
 /** Run tests/e2e/upgrade-check.php and return what it reports about the upgraded database. */
-export function upgradeOldDatabase(statementsAlreadyRun = 0): {
-  campaigns: { id: number; name: string }[];
+export function upgradeOldDatabase(statementsAlreadyRun = 0, { oddRoleCheck = false } = {}): {
+  campaigns: { id: number; name: string; owner: number }[];
+  admins: number;
+  userLog: number;
   characters: number[];
   stores: number[];
   log: number[];
 } {
   const [cmd, ...args] = phpCommand();
-  const out = execFileSync(cmd, [...args, 'tests/e2e/upgrade-check.php', String(statementsAlreadyRun)], { cwd: ROOT, stdio: 'pipe' });
+  const out = execFileSync(cmd, [...args, 'tests/e2e/upgrade-check.php', String(statementsAlreadyRun), ...(oddRoleCheck ? ['--odd-role-check'] : [])], { cwd: ROOT, stdio: 'pipe' });
   return JSON.parse(out.toString());
 }

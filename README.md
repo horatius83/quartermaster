@@ -4,6 +4,7 @@ A small web app for running a tabletop RPG's economy. The DM keeps every player'
 
 - **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog, approve or decline carts, and review the history of every pack and purse.
 - **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack and its history.
+- **Admin:** add and delete DMs and other logins, and read the account log of every login added or deleted.
 
 Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals) and is loaded from a CDN.
 
@@ -22,9 +23,19 @@ All four steps happen in one transaction.
 
 ## Campaigns
 
-One DM login can run several campaigns. Each campaign has its own party, stores, carts and pack history; the item catalog is shared, so every campaign can stock the same gear at its own prices. The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters and stores are gone.
+One DM login can run several campaigns, and each DM sees only their own. Each campaign has its own party, stores, carts and pack history; the item catalog is shared by every campaign and every DM, so each can stock the same gear at its own prices. The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters and stores are gone.
 
 Each player login belongs to one character, so it sees only that character's campaign. Someone playing in two campaigns gets a login for each.
+
+## Logins and the admin
+
+There are three kinds of login. The **admin** manages logins under *Users*: it adds DMs (or more admins), deletes any login except its own and the last admin, and hands a campaign, party and all, from one DM to another. It doesn't run campaigns, so if you're also a DM you keep a separate DM login. **DMs** add their players under *Party & logins*, each with a character.
+
+Deleting a player leaves their character in the party without a login. A DM can only be deleted once their campaigns have no characters or stores (hand a campaign to another DM to keep it); their empty campaigns are deleted with them.
+
+Every login added or deleted, by the admin or by a DM managing their party, and every campaign handed over, is written to `user_log` with who did it. The admin reads it under *Account log*.
+
+A new install has no admin at first: `/setup` makes the first DM. Until an admin exists, DMs see *Create the admin account* in the sidebar. Use it once to make the admin login, then sign in with it.
 
 ## Pack history
 
@@ -38,8 +49,9 @@ Older databases are brought up to date automatically on the first request after 
 
 - **001, pack history:** adds the history table. Safe to run again.
 - **002, campaigns:** adds campaigns and moves your existing party, stores and history into one campaign. It's named from `campaign_name` in your `config.php` if that's set, otherwise "My Campaign"; rename it under *Campaigns*. After that `campaign_name` is no longer used and you can delete it from `config.php`.
+- **003, admin:** adds the admin login and the account log, and gives every campaign an owning DM. Existing campaigns go to your oldest DM login. Afterwards, sign in as a DM and use *Create the admin account*. If you had more than one DM login, sign in as the admin and use *Hand over* under *Users* to give each campaign back to the DM who runs it. If the database had no DM login at all, `/setup` opens again and the DM it makes takes every campaign.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import `upgrade-002-campaigns.mysql.sql` only once: unlike 001, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import `upgrade-002-campaigns.mysql.sql` and `upgrade-003-admin.mysql.sql` only once each: unlike 001, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
@@ -50,7 +62,7 @@ If your database user can't change tables, import the missing files yourself thr
    - **Manual (tidiest):** put the `app/` folder in your home directory, next to `public_html`, and put the *contents* of `public/` into `public_html`.
 4. **Configure.** In *File Manager*, copy `app/config.example.php` to `app/config.php` and fill in the database details. `config.php` is git-ignored, so redeploys won't overwrite it.
 5. **PHP version.** Use PHP 8.1 or newer under *Advanced → PHP Configuration*. Make sure `pdo_mysql` is enabled; it is by default.
-6. **Create the DM account.** Visit your site. The first visit goes to `/setup`, where you create the DM login and name your first campaign. After that, add players under *Party & logins*.
+6. **Create the DM account.** Visit your site. The first visit goes to `/setup`, where you create the DM login and name your first campaign. After that, add players under *Party & logins*, and use *Create the admin account* in the sidebar to make the admin login that adds more DMs.
 
 Use HTTPS, which Hostinger provides for free: session cookies are marked secure automatically when the site is served over HTTPS.
 
@@ -64,7 +76,7 @@ php scripts/seed-demo.php                  # optional: sample party, stores and 
 php -S localhost:8000 -t public scripts/dev-router.php
 ```
 
-Open http://localhost:8000. The demo logins are `dm` / `dungeon123` and players `bryn`, `tamsin`, `oskar`, `wren` / `adventure`. The demo has a second, smaller campaign with one player, `sela` / `adventure`, so you can try switching. The seed script also works against MySQL, but only on an empty database.
+Open http://localhost:8000. The demo logins are `admin` / `quartermaster`, `dm` / `dungeon123` and players `bryn`, `tamsin`, `oskar`, `wren` / `adventure`. The demo has a second, smaller campaign with one player, `sela` / `adventure`, so you can try switching. The seed script also works against MySQL, but only on an empty database.
 
 ## End-to-end tests
 
