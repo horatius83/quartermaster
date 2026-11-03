@@ -30,11 +30,19 @@ export function resetDatabase({ empty = false } = {}): void {
   execFileSync(cmd, [...args, 'tests/e2e/reset.php', ...(empty ? ['--empty'] : [])], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
 }
 
+/** Run tests/e2e/session-check.php: who current_user() sees for a hand-made DM session, and what's left in it. */
+export function checkSession(kind: 'legacy' | 'current' | 'deleted'): { user: string | null; sessionKeys: string[] } {
+  const [cmd, ...args] = phpCommand();
+  const out = execFileSync(cmd, [...args, 'tests/e2e/session-check.php', kind], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+  return JSON.parse(out.toString());
+}
+
 /** Run tests/e2e/upgrade-check.php and return what it reports about the upgraded database. */
 export function upgradeOldDatabase(statementsAlreadyRun = 0, { oddRoleCheck = false } = {}): {
   campaigns: { id: number; name: string; owner: number }[];
   admins: number;
   userLog: number;
+  sessionVersions: number[];
   characters: number[];
   stores: number[];
   log: number[];

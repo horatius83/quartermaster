@@ -49,6 +49,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <?= $nav('party', '/dm/party', 'Party & logins') ?>
     <div class="nav-rule"></div>
     <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
+    <?= $nav('password', '/account/password', 'Change password') ?>
     <?php if (!admin_exists()): ?><?= $nav('admin-account', '/dm/admin-account', 'Create the admin account') ?><?php endif; ?>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
@@ -68,6 +69,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <?= $nav('users', '/admin/users', 'Users') ?>
     <?= $nav('log', '/admin/log', 'Account log') ?>
     <div class="nav-rule"></div>
+    <?= $nav('password', '/account/password', 'Change password') ?>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
       <button class="nav-link nav-button" type="submit">Sign out (<?= e($user['username']) ?>)</button>

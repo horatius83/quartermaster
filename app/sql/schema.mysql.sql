@@ -8,8 +8,20 @@ CREATE TABLE users (
   username      VARCHAR(50)  NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   role          ENUM('admin','dm','player') NOT NULL,
+  -- Goes up with every new password; sessions signed in under an older value are signed out.
+  session_version INT UNSIGNED NOT NULL DEFAULT 0,
   created_at    DATETIME NOT NULL,
   UNIQUE KEY uq_users_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Recent wrong passwords, by the name tried and the address they came from, so guessing can be slowed.
+CREATE TABLE login_attempts (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  username   VARCHAR(50) NOT NULL,
+  ip         VARCHAR(45) NOT NULL,
+  created_at DATETIME NOT NULL,
+  KEY ix_login_attempts_created (created_at),
+  KEY ix_login_attempts_ip (ip, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.

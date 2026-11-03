@@ -10,8 +10,8 @@
     <label class="field">Admin username
       <input name="username" required maxlength="50" autocomplete="off" value="<?= e($old['username'] ?? '') ?>">
     </label>
-    <label class="field">Admin password (8+ characters)
-      <input name="password" type="password" required minlength="8" autocomplete="new-password">
+    <label class="field">Admin password (<?= STAFF_PASSWORD_MIN ?>+ characters)
+      <input name="password" type="password" required minlength="<?= STAFF_PASSWORD_MIN ?>" autocomplete="new-password">
     </label>
     <button class="btn btn-primary" type="submit">Create admin account</button>
   </form>

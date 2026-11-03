@@ -6,8 +6,20 @@ CREATE TABLE users (
   username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL CHECK (role IN ('admin','dm','player')),
+  -- Goes up with every new password; sessions signed in under an older value are signed out.
+  session_version INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL
 );
+
+-- Recent wrong passwords, by the name tried and the address they came from, so guessing can be slowed.
+CREATE TABLE login_attempts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  username   TEXT NOT NULL COLLATE NOCASE,
+  ip         TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX ix_login_attempts_created ON login_attempts (created_at);
+CREATE INDEX ix_login_attempts_ip ON login_attempts (ip, created_at);
 
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
 -- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.

@@ -9,4 +9,6 @@ return [
     ],
     'base_path' => null,
     'debug' => true,
+    // Lets tests act as visitors from different addresses (see the wrong-password tests).
+    'client_ip_header' => 'HTTP_X_TEST_CLIENT_IP',
 ];

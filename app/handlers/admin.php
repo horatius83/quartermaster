@@ -51,8 +51,8 @@ function admin_user_create(): void
     if (!in_array($role, ['dm', 'admin'], true)) {
         back_with_error('/admin/users', 'Choose whether the new login is a DM or an admin.', $keep);
     }
-    if ($username === '' || strlen($password) < 8) {
-        back_with_error('/admin/users', 'Pick a username and a password of at least 8 characters.', $keep);
+    if ($username === '' || strlen($password) < STAFF_PASSWORD_MIN) {
+        back_with_error('/admin/users', 'Pick a username and a password of at least ' . STAFF_PASSWORD_MIN . ' characters.', $keep);
     }
     if (username_taken($username)) {
         $taken();
@@ -123,6 +123,21 @@ function admin_user_delete(int $id): void
         redirect('/admin/users');
     }
     flash("Deleted {$user['username']}.");
+    redirect('/admin/users');
+}
+
+/** Give a DM who's forgotten their password a new one. It signs them out everywhere until they use it. */
+function admin_user_password(int $id): void
+{
+    require_admin();
+    $dm = q_one("SELECT id, username, role FROM users WHERE id = ? AND role = 'dm'", [$id]) ?? abort(404, 'No such DM.');
+    $password = (string)($_POST['password'] ?? '');
+    if (strlen($password) < STAFF_PASSWORD_MIN) {
+        flash('DM passwords need at least ' . STAFF_PASSWORD_MIN . ' characters.', 'error');
+        redirect('/admin/users');
+    }
+    transaction(fn() => set_password($dm, $password, 'Reset by the admin'));
+    flash("New password set for {$dm['username']}. Let them know it.");
     redirect('/admin/users');
 }
 
@@ -197,8 +212,8 @@ function admin_account_submit(): void
     $dm = require_dm();
     $username = post_str('username', 50);
     $password = (string)($_POST['password'] ?? '');
-    if ($username === '' || strlen($password) < 8) {
-        back_with_error('/dm/admin-account', 'Pick a username and a password of at least 8 characters.', ['username']);
+    if ($username === '' || strlen($password) < STAFF_PASSWORD_MIN) {
+        back_with_error('/dm/admin-account', 'Pick a username and a password of at least ' . STAFF_PASSWORD_MIN . ' characters.', ['username']);
     }
     if (username_taken($username)) {
         back_with_error('/dm/admin-account', "The username “{$username}” is already taken.", []);

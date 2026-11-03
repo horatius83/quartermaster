@@ -115,11 +115,12 @@ function party_names(): array
 }
 
 /**
- * Record a change to a login in the account log, with who made it: $action is 'create', 'delete', or 'move'
- * (a campaign handed to the DM $userId). Call inside the transaction that makes the change.
+ * Record a change to a login in the account log, with who made it: $action is 'create', 'delete', 'password'
+ * (a new password; never the password itself), 'lockout' (too many wrong passwords for it, or with no
+ * $userId, from one address for any names), or 'move' (a campaign handed to the DM $userId). Call inside the transaction that makes the change.
  * $actor defaults to the signed-in user.
  */
-function log_user(string $action, int $userId, string $username, string $role, string $detail = '', ?array $actor = null): void
+function log_user(string $action, ?int $userId, string $username, string $role, string $detail = '', ?array $actor = null): void
 {
     $actor ??= current_user();
     q(
@@ -141,6 +142,18 @@ function create_login(string $username, string $password, string $role, string $
     );
     log_user('create', $id, $username, $role, $detail, current_user() ?? ['id' => $id, 'username' => $username]);
     return $id;
+}
+
+/**
+ * Give a login ($user needs id, username and role) a new password and log it. Bumping session_version
+ * signs out every session of that login, so a reset locks out whoever else was using it; to stay signed
+ * in after changing your own, call login_user() with just your id once this commits.
+ * Call inside a transaction.
+ */
+function set_password(array $user, string $password, string $detail): void
+{
+    q('UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $user['id']]);
+    log_user('password', (int)$user['id'], $user['username'], $user['role'], $detail);
 }
 
 /** Delete a login ($user needs id, username and role) and log it. Call inside a transaction. */

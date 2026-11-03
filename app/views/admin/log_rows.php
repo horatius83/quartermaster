@@ -1,9 +1,12 @@
 <?php
 /** @var array $rows @var bool $hasMore */
 $roleLabels = ['admin' => 'admin', 'dm' => 'DM', 'player' => 'player'];
-$actions = ['create' => ['Added', 'delta-up'], 'delete' => ['Deleted', 'delta-down'], 'move' => ['Handed a campaign to', 'delta-up']];
+$actions = ['create' => ['Added', 'delta-up'], 'delete' => ['Deleted', 'delta-down'], 'move' => ['Handed a campaign to', 'delta-up'], 'password' => ['New password for', ''], 'lockout' => ['Too many wrong passwords for', 'delta-down']];
 foreach ($rows as $l):
-    [$label, $class] = $actions[$l['action']] ?? [$l['action'], '']; ?>
+    [$label, $class] = $actions[$l['action']] ?? [$l['action'], ''];
+    if ($l['action'] === 'lockout' && $l['username'] === '') {
+        $label = 'Too many wrong passwords from one address'; // guesses across many names
+    } ?>
   <tr>
     <td class="nowrap" title="<?= e($l['created_at']) ?> UTC"><?= e(time_ago($l['created_at'])) ?></td>
     <td>

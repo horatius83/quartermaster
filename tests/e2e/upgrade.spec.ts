@@ -7,6 +7,8 @@ const UPGRADED = {
   campaigns: [{ id: 1, name: 'The Old Campaign', owner: 1 }],
   admins: 2,
   userLog: 0,
+  // Upgrade 004: every login starts at session version 0 (dm, bryn, then the two admins added after).
+  sessionVersions: [0, 0, 0, 0],
   characters: [1, 1],
   stores: [1],
   log: [1, 1],

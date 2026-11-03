@@ -14,11 +14,14 @@ $routes = [
     ['POST', '/logout',                    'logout_submit'],
     ['GET',  '/setup',                     'setup_form'],
     ['POST', '/setup',                     'setup_submit'],
+    ['GET',  '/account/password',          'account_password_form'],
+    ['POST', '/account/password',          'account_password_submit'],
 
     // Admin: logins and the account log
     ['GET',  '/admin/users',               'admin_users'],
     ['POST', '/admin/users',               'admin_user_create'],
     ['POST', '/admin/users/{id}/delete',   'admin_user_delete'],
+    ['POST', '/admin/users/{id}/password', 'admin_user_password'],
     ['POST', '/admin/campaigns/{id}/owner','admin_campaign_owner'],
     ['GET',  '/admin/log',                 'admin_log'],
     ['GET',  '/dm/admin-account',          'admin_account_form'],

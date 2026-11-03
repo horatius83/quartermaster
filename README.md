@@ -33,7 +33,13 @@ There are three kinds of login. The **admin** manages logins under *Users*: it a
 
 Deleting a player leaves their character in the party without a login. A DM can only be deleted once their campaigns have no characters or stores (hand a campaign to another DM to keep it); their empty campaigns are deleted with them.
 
-Every login added or deleted, by the admin or by a DM managing their party, and every campaign handed over, is written to `user_log` with who did it. The admin reads it under *Account log*.
+Admins and DMs change their own password under *Change password*. The admin can also reset a DM's password from *Users*, and DMs reset their players' under *Party & logins*. A new password signs that login out everywhere else.
+
+Wrong passwords slow guessing down, at sign-in and on *Change password* alike. After 5 wrong tries for one name from one address, or 20 from one address in all, that address waits 15 minutes; a session guessing on *Change password* is signed out. Someone already signed in isn't paused by other people's mistakes at a shared address. Each pause is written to the account log.
+
+If you put the site behind a proxy or CDN such as Cloudflare, every visitor's address looks like the proxy's, so one person's wrong passwords would pause everyone. Set `client_ip_header` in `config.php` to the header holding the real address (`'HTTP_CF_CONNECTING_IP'` for Cloudflare). Leave it unset otherwise, since visitors could fake that header.
+
+Every login added or deleted, every password changed or reset, and every campaign handed over is written to `user_log` with who did it, by the admin or by a DM managing their party. The passwords themselves are never recorded. The admin reads it under *Account log*.
 
 A new install has no admin at first: `/setup` makes the first DM. Until an admin exists, DMs see *Create the admin account* in the sidebar. Use it once to make the admin login, then sign in with it.
 
@@ -51,7 +57,9 @@ Older databases are brought up to date automatically on the first request after 
 - **002, campaigns:** adds campaigns and moves your existing party, stores and history into one campaign. It's named from `campaign_name` in your `config.php` if that's set, otherwise "My Campaign"; rename it under *Campaigns*. After that `campaign_name` is no longer used and you can delete it from `config.php`.
 - **003, admin:** adds the admin login and the account log, and gives every campaign an owning DM. Existing campaigns go to your oldest DM login. Afterwards, sign in as a DM and use *Create the admin account*. If you had more than one DM login, sign in as the admin and use *Hand over* under *Users* to give each campaign back to the DM who runs it. If the database had no DM login at all, `/setup` opens again and the DM it makes takes every campaign.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import `upgrade-002-campaigns.mysql.sql` and `upgrade-003-admin.mysql.sql` only once each: unlike 001, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+- **004, sign-in:** lets a new password sign that login out everywhere else, and adds the table that limits wrong passwords. Everyone has to sign in again once after this upgrade.
+
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003 and 004 only once each: unlike 001, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
