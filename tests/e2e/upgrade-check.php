@@ -46,6 +46,7 @@ echo json_encode([
     'campaigns'  => array_map(fn($c) => ['id' => (int)$c['id'], 'name' => $c['name'], 'owner' => (int)$c['owner_user_id']], q_all('SELECT * FROM campaigns')),
     'admins'     => (int)q_val("SELECT COUNT(*) FROM users WHERE role = 'admin'"),
     'userLog'    => (int)q_val('SELECT COUNT(*) FROM user_log'),
+    'sessionVersions' => array_map('intval', array_column(q_all('SELECT session_version FROM users ORDER BY id'), 'session_version')),
     'characters' => $campaignOf('characters'),
     'stores'     => $campaignOf('stores'),
     'log'        => $campaignOf('inventory_log'),

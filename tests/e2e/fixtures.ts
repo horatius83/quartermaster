@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as base, expect, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
 import { resetDatabase } from './php';
 
 // Demo seed logins (scripts/seed-demo.php). Character ids follow the seed order.
@@ -28,7 +28,19 @@ export const signInAsDm = (page: Page) => signIn(page, DM.username, DM.password)
 /** The toast area; messages fade after a few seconds, so check them straight after the action. */
 export const toasts = (page: Page) => page.locator('#toasts');
 
-export const test = base.extend<{ freshDatabase: void }>({
+/** Opens a page in a browser context of its own (its own cookies, so another visitor); closed after the test. */
+export type OpenPage = (options?: BrowserContextOptions) => Promise<Page>;
+
+export const test = base.extend<{ freshDatabase: void; openPage: OpenPage }>({
+  openPage: async ({ browser }, use) => {
+    const contexts: BrowserContext[] = [];
+    await use(async (options) => {
+      const context = await browser.newContext(options);
+      contexts.push(context);
+      return context.newPage();
+    });
+    await Promise.all(contexts.map((c) => c.close()));
+  },
   // Every test starts from the demo seed and accepts hx-confirm dialogs.
   freshDatabase: [
     async ({ page }, use) => {

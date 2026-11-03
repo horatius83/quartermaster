@@ -2,7 +2,7 @@
 <main class="main">
   <header>
     <h1 class="page-title">Account log</h1>
-    <p class="muted" style="margin:6px 0 0;max-width:680px">Every login added or deleted, every campaign handed to another DM, and who did it, newest first. That includes the player logins DMs make and remove with their party.</p>
+    <p class="muted" style="margin:6px 0 0;max-width:680px">Every login added or deleted, every password changed or reset, every campaign handed to another DM, and who did it, newest first. That includes what DMs do to their players’ logins. Passwords themselves are never recorded.</p>
   </header>
 
   <div class="table-wrap">

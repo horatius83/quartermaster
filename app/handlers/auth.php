@@ -32,9 +32,10 @@ function login_submit(): void
     $username = post_str('username', 50);
     $password = (string)($_POST['password'] ?? '');
     $user = q_one('SELECT * FROM users WHERE username = ?', [$username]);
-
-    if (!$user || !password_verify($password, $user['password_hash'])) {
-        page('auth/login', ['error' => 'That name and password don’t match our ledger.', 'username' => $username], 'Sign in');
+    $result = check_password($username, $user, $password, 'at sign-in');
+    if ($result !== 'ok') {
+        $error = $result === 'blocked' ? wrong_password_pause_message() : 'That name and password don’t match our ledger.';
+        page('auth/login', ['error' => $error, 'username' => $username], 'Sign in');
     }
     if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
         q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $user['id']]);
@@ -65,8 +66,8 @@ function setup_submit(): void
     $username = post_str('username', 50);
     $password = (string)($_POST['password'] ?? '');
     $campaign = post_str('campaign', 100);
-    if ($username === '' || strlen($password) < 8 || $campaign === '') {
-        back_with_error('/setup', 'Pick a username, a password of at least 8 characters and a campaign name.', ['username', 'campaign']);
+    if ($username === '' || strlen($password) < STAFF_PASSWORD_MIN || $campaign === '') {
+        back_with_error('/setup', 'Pick a username, a password of at least ' . STAFF_PASSWORD_MIN . ' characters and a campaign name.', ['username', 'campaign']);
     }
     if (username_taken($username)) {
         back_with_error('/setup', "The username “{$username}” is already taken.", ['campaign']);

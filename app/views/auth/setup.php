@@ -9,8 +9,8 @@
     <label class="field">DM username
       <input name="username" autocomplete="username" required autofocus maxlength="50" value="<?= e($old['username'] ?? '') ?>">
     </label>
-    <label class="field">Password (8+ characters)
-      <input type="password" name="password" autocomplete="new-password" required minlength="8">
+    <label class="field">Password (<?= STAFF_PASSWORD_MIN ?>+ characters)
+      <input type="password" name="password" autocomplete="new-password" required minlength="<?= STAFF_PASSWORD_MIN ?>">
     </label>
     <label class="field">Campaign name
       <input name="campaign" required maxlength="100" placeholder="e.g. Curse of the Sunken Crown" value="<?= e($old['campaign'] ?? '') ?>">

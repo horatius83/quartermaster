@@ -23,6 +23,11 @@ return [
     // and links come out wrong, e.g. '/quartermaster'.
     'base_path' => null,
 
+    // Only behind a proxy or CDN (such as Cloudflare): the $_SERVER key holding the visitor's real address,
+    // e.g. 'HTTP_CF_CONNECTING_IP' or 'HTTP_X_FORWARDED_FOR'. Wrong-password limits count per address, so
+    // without this every visitor looks like the proxy. Leave null otherwise: visitors could fake the header.
+    'client_ip_header' => null,
+
     // Set to true while developing to see PHP errors in the browser.
     'debug' => false,
 ];

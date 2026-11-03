@@ -13,8 +13,8 @@ $roleLabels = ['admin' => 'Admin', 'dm' => 'DM', 'player' => 'Player']; ?>
       <label class="field mid">Username
         <input name="username" required maxlength="50" autocomplete="off" value="<?= e($old['username'] ?? '') ?>">
       </label>
-      <label class="field mid">Password (8+ characters)
-        <input name="password" type="text" required minlength="8" autocomplete="off">
+      <label class="field mid">Password (<?= STAFF_PASSWORD_MIN ?>+ characters)
+        <input name="password" type="text" required minlength="<?= STAFF_PASSWORD_MIN ?>" autocomplete="off">
       </label>
       <label class="field mid">Role
         <select name="role">
@@ -52,6 +52,14 @@ $roleLabels = ['admin' => 'Admin', 'dm' => 'DM', 'player' => 'Player']; ?>
             </td>
             <td class="nowrap muted"><?= e(substr($u['created_at'], 0, 10)) ?></td>
             <td class="right nowrap">
+              <?php if ($u['role'] === 'dm'): ?>
+                <form class="move-form" method="post" action="<?= e(url('/admin/users/' . $u['id'] . '/password')) ?>" style="display:inline-flex">
+                  <?= csrf_field() ?>
+                  <label class="visually-hidden" for="pw-<?= (int)$u['id'] ?>">New password for <?= e($u['username']) ?></label>
+                  <input class="input-sm" style="width:140px" id="pw-<?= (int)$u['id'] ?>" name="password" type="text" placeholder="new password" required minlength="<?= STAFF_PASSWORD_MIN ?>" autocomplete="off">
+                  <button class="btn" type="submit">Reset password</button>
+                </form>
+              <?php endif; ?>
               <?php if (!$isMe):
                 $confirm = match ($u['role']) {
                     'dm'     => "Delete {$u['username']}? This only works once their campaigns have no characters or stores; their empty campaigns go too.",

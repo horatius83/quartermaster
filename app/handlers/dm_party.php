@@ -100,7 +100,9 @@ function dm_party_password(int $characterId): void
     }
 
     if ($char['user_id']) {
-        q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $char['user_id']]);
+        $login = q_one('SELECT id, username, role FROM users WHERE id = ?', [$char['user_id']])
+            ?? htmx_fail("{$char['name']}’s login was just deleted. Reload the page to give them a new one.");
+        transaction(fn() => set_password($login, $password, "Reset by their DM, for {$char['name']}"));
         toast("Password updated for {$char['name']}.");
     } else {
         if ($username === '') {
