@@ -15,6 +15,15 @@ $routes = [
     ['GET',  '/setup',                     'setup_form'],
     ['POST', '/setup',                     'setup_submit'],
 
+    // Admin: logins and the account log
+    ['GET',  '/admin/users',               'admin_users'],
+    ['POST', '/admin/users',               'admin_user_create'],
+    ['POST', '/admin/users/{id}/delete',   'admin_user_delete'],
+    ['POST', '/admin/campaigns/{id}/owner','admin_campaign_owner'],
+    ['GET',  '/admin/log',                 'admin_log'],
+    ['GET',  '/dm/admin-account',          'admin_account_form'],
+    ['POST', '/dm/admin-account',          'admin_account_submit'],
+
     // DM: campaigns
     ['GET',  '/dm/campaigns',              'dm_campaigns'],
     ['POST', '/dm/campaigns',              'dm_campaign_create'],
@@ -75,10 +84,4 @@ $routes = [
     ['GET',  '/history',                   'player_history'],
 ];
 
-$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
-$base = base_path();
-if ($base !== '' && str_starts_with($path, $base)) {
-    $path = substr($path, strlen($base)) ?: '/';
-}
-
-dispatch($routes, $_SERVER['REQUEST_METHOD'] ?? 'GET', $path);
+dispatch($routes, $_SERVER['REQUEST_METHOD'] ?? 'GET', request_path());

@@ -5,15 +5,17 @@ CREATE TABLE users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT NOT NULL,
-  role          TEXT NOT NULL CHECK (role IN ('dm','player')),
+  role          TEXT NOT NULL CHECK (role IN ('admin','dm','player')),
   created_at    TEXT NOT NULL
 );
 
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
+-- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.
 CREATE TABLE campaigns (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_user_id INTEGER NULL REFERENCES users(id),
+  name          TEXT NOT NULL,
+  created_at    TEXT NOT NULL
 );
 
 CREATE TABLE characters (
@@ -117,6 +119,19 @@ CREATE TABLE inventory_log (
 );
 CREATE INDEX ix_inventory_log_campaign ON inventory_log (campaign_id, id);
 CREATE INDEX ix_inventory_log_character ON inventory_log (character_id, id);
+
+-- Every login created or deleted, and by whom. actor_name, username and role are copied in so the log survives deletions.
+CREATE TABLE user_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_user_id INTEGER NULL,
+  actor_name    TEXT NOT NULL DEFAULT '',
+  action        TEXT NOT NULL,
+  user_id       INTEGER NULL,
+  username      TEXT NOT NULL DEFAULT '',
+  role          TEXT NOT NULL DEFAULT '',
+  detail        TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL
+);
 
 INSERT INTO categories (name, slug, sort_order) VALUES
   ('Weapon', 'weapon', 1),

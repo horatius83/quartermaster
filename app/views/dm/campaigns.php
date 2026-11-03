@@ -1,7 +1,7 @@
 <main class="main">
   <header>
     <h1 class="page-title">Campaigns</h1>
-    <p class="muted" style="margin:6px 0 0;max-width:680px">Each campaign keeps its own party, stores, carts and pack history. The item catalog is shared, so every campaign can stock the same gear. The other pages show the campaign you’re running now; switch with the menu at the top of the sidebar.</p>
+    <p class="muted" style="margin:6px 0 0;max-width:680px">Each campaign keeps its own party, stores, carts and pack history. Only you see your campaigns. The item catalog is shared by every campaign and every DM, so all of them can stock the same gear. The other pages show the campaign you’re running now; switch with the menu at the top of the sidebar.</p>
   </header>
 
   <form class="card card-dashed form-row" method="post" action="<?= e(url('/dm/campaigns')) ?>">

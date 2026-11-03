@@ -3,6 +3,7 @@ import { resetDatabase } from './php';
 
 // Demo seed logins (scripts/seed-demo.php). Character ids follow the seed order.
 export const DM = { username: 'dm', password: 'dungeon123' };
+export const ADMIN = { username: 'admin', password: 'quartermaster' };
 export const PLAYER_PASSWORD = 'adventure';
 export const BRYN = 1;
 export const TAMSIN = 2;

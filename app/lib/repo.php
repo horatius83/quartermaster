@@ -4,6 +4,13 @@ declare(strict_types=1);
 // Shared queries used by several screens.
 // Characters, stores, carts and history belong to a campaign. The lookups below only see the current one
 // (the DM's chosen campaign, or a player's own), so an id from another campaign reads as "not found".
+// Each DM sees only the campaigns they own, so another DM's campaign reads as "not found" too.
+
+/** The signed-in user's id, which owns the campaigns a DM sees. */
+function owner_id(): int
+{
+    return (int)(current_user()['id'] ?? 0);
+}
 
 function campaigns(): array
 {
@@ -11,24 +18,25 @@ function campaigns(): array
         'SELECT c.*,
                 (SELECT COUNT(*) FROM characters ch WHERE ch.campaign_id = c.id) AS character_count,
                 (SELECT COUNT(*) FROM stores s WHERE s.campaign_id = c.id) AS store_count
-           FROM campaigns c ORDER BY c.name, c.id'
+           FROM campaigns c WHERE c.owner_user_id = ? ORDER BY c.name, c.id',
+        [owner_id()]
     );
 }
 
-/** Id and name of every campaign, for the sidebar's campaign menu. */
+/** Id and name of every campaign this DM runs, for the sidebar's campaign menu. */
 function campaign_names(): array
 {
-    return q_all('SELECT id, name FROM campaigns ORDER BY name, id');
+    return q_all('SELECT id, name FROM campaigns WHERE owner_user_id = ? ORDER BY name, id', [owner_id()]);
 }
 
 function campaign(int $id): ?array
 {
-    return q_one('SELECT * FROM campaigns WHERE id = ?', [$id]);
+    return q_one('SELECT * FROM campaigns WHERE id = ? AND owner_user_id = ?', [$id, owner_id()]);
 }
 
-function create_campaign(string $name): int
+function create_campaign(string $name, int $ownerId): int
 {
-    return insert('INSERT INTO campaigns (name, created_at) VALUES (?, ?)', [$name, now()]);
+    return insert('INSERT INTO campaigns (owner_user_id, name, created_at) VALUES (?, ?, ?)', [$ownerId, $name, now()]);
 }
 
 /** The campaign being viewed: the one the DM last picked (or the first), or the player's character's. */
@@ -45,9 +53,12 @@ function current_campaign(): ?array
     if ($user['role'] === 'player') {
         return $cached = q_one('SELECT cp.* FROM campaigns cp JOIN characters ch ON ch.campaign_id = cp.id WHERE ch.user_id = ?', [$user['id']]);
     }
+    if ($user['role'] !== 'dm') {
+        return $cached = null; // the admin runs no campaigns
+    }
     $campaign = campaign((int)($_SESSION['campaign_id'] ?? 0))
-        ?? q_one('SELECT * FROM campaigns ORDER BY id LIMIT 1')
-        ?? campaign(create_campaign('My Campaign'));
+        ?? q_one('SELECT * FROM campaigns WHERE owner_user_id = ? ORDER BY id LIMIT 1', [$user['id']])
+        ?? campaign(create_campaign('My Campaign', (int)$user['id']));
     $_SESSION['campaign_id'] = (int)$campaign['id'];
     return $cached = $campaign;
 }
@@ -101,6 +112,57 @@ function characters_with_load(): array
 function party_names(): array
 {
     return q_all('SELECT id, name FROM characters WHERE campaign_id = ? ORDER BY name', [campaign_id()]);
+}
+
+/**
+ * Record a change to a login in the account log, with who made it: $action is 'create', 'delete', or 'move'
+ * (a campaign handed to the DM $userId). Call inside the transaction that makes the change.
+ * $actor defaults to the signed-in user.
+ */
+function log_user(string $action, int $userId, string $username, string $role, string $detail = '', ?array $actor = null): void
+{
+    $actor ??= current_user();
+    q(
+        'INSERT INTO user_log (actor_user_id, actor_name, action, user_id, username, role, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [$actor['id'] ?? null, $actor['username'] ?? '', $action, $userId, $username, $role, mb_substr($detail, 0, 255), now()]
+    );
+}
+
+/**
+ * Create a login and log it. Every login is made through here, so none can skip the account log.
+ * With nobody signed in (the first DM, at setup) the new login is logged as having made itself.
+ * Call inside a transaction. Throws PDOException if the username is taken. Returns the new id.
+ */
+function create_login(string $username, string $password, string $role, string $detail = ''): int
+{
+    $id = insert(
+        'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
+        [$username, password_hash($password, PASSWORD_DEFAULT), $role, now()]
+    );
+    log_user('create', $id, $username, $role, $detail, current_user() ?? ['id' => $id, 'username' => $username]);
+    return $id;
+}
+
+/** Delete a login ($user needs id, username and role) and log it. Call inside a transaction. */
+function delete_login(array $user, string $detail = ''): void
+{
+    q('DELETE FROM users WHERE id = ?', [$user['id']]);
+    log_user('delete', (int)$user['id'], $user['username'], $user['role'], $detail);
+}
+
+/** Whether the admin login exists yet. Once it does it always will (the last admin can't be deleted), so the session remembers. */
+function admin_exists(): bool
+{
+    if (!empty($_SESSION['admin_exists'])) {
+        return true;
+    }
+    return $_SESSION['admin_exists'] = (bool)q_val("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1");
+}
+
+/** Whether any login already uses $username (compared the way the unique key compares it). */
+function username_taken(string $username): bool
+{
+    return (bool)q_val('SELECT id FROM users WHERE username = ?', [$username]);
 }
 
 function character(int $id): ?array

@@ -43,6 +43,7 @@ function db(): PDO
 const UPGRADES = [
     '001-inventory-log' => 'SELECT 1 FROM inventory_log LIMIT 1',
     '002-campaigns'     => 'SELECT campaign_id FROM inventory_log LIMIT 1',
+    '003-admin'         => 'SELECT 1 FROM user_log LIMIT 1',
 ];
 
 /**
@@ -165,6 +166,26 @@ function insert(string $sql, array $params = []): int
 {
     q($sql, $params);
     return (int)db()->lastInsertId();
+}
+
+/**
+ * Run $fn holding a MySQL named lock, so only one request at a time runs it. For checks over a set of rows
+ * that row locks can't cover (how many admins are left). SQLite, used only for local development, goes without.
+ */
+function with_lock(string $name, callable $fn): mixed
+{
+    if (db_driver() !== 'mysql') {
+        return $fn();
+    }
+    $name = 'quartermaster_' . $name;
+    if ((int)q_val('SELECT GET_LOCK(?, 10)', [$name]) !== 1) {
+        throw new RuntimeException('The ledger is busy. Try again in a moment.');
+    }
+    try {
+        return $fn();
+    } finally {
+        q('SELECT RELEASE_LOCK(?)', [$name]);
+    }
 }
 
 /** Run $fn inside a transaction; rolls back and rethrows on any exception. */

@@ -64,11 +64,74 @@ function flash(string $message, string $kind = 'ok'): void
     $_SESSION['flash'][] = ['message' => $message, 'kind' => $kind];
 }
 
-function take_flashes(): array
+/** Take the queued flash messages, or only those of one $kind (leaving the rest for the layout's toasts). */
+function take_flashes(?string $kind = null): array
 {
-    $f = $_SESSION['flash'] ?? [];
-    unset($_SESSION['flash']);
-    return $f;
+    $all = $_SESSION['flash'] ?? [];
+    $taken = $kind === null ? $all : array_values(array_filter($all, fn($f) => $f['kind'] === $kind));
+    $left = $kind === null ? [] : array_values(array_filter($all, fn($f) => $f['kind'] !== $kind));
+    if ($left) {
+        $_SESSION['flash'] = $left;
+    } else {
+        unset($_SESSION['flash']);
+    }
+    return $taken;
+}
+
+/** The request's path within the app, without the base path or query string (e.g. "/dm/party"). */
+function request_path(): string
+{
+    $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+    $base = base_path();
+    if ($base !== '' && str_starts_with($path, $base)) {
+        $path = substr($path, strlen($base)) ?: '/';
+    }
+    return '/' . trim($path, '/');
+}
+
+/** How long input kept by back_with_error() waits for its page before it's thrown away. */
+const OLD_INPUT_TTL = 300;
+
+/**
+ * Send a failed form submit back to $path with an error, keeping the $keep fields so they needn't be retyped.
+ * Only fields named in $keep are kept, so a password or token can't end up in the session by accident.
+ * A field posted as a list (checkboxes, multi-selects) is kept as a list of strings.
+ */
+function back_with_error(string $path, string $message, array $keep): never
+{
+    $clip = fn($v) => mb_substr($v, 0, 255);
+    $fields = [];
+    foreach (array_intersect_key($_POST, array_flip($keep)) as $key => $value) {
+        if (is_string($value)) {
+            $fields[$key] = $clip($value);
+        } elseif (is_array($value)) {
+            $fields[$key] = array_map($clip, array_values(array_filter($value, 'is_string')));
+        }
+    }
+    $_SESSION['old_input'] = ['path' => '/' . trim($path, '/'), 'fields' => $fields, 'at' => time()];
+    flash($message, 'error');
+    redirect($path);
+}
+
+/**
+ * Take the input kept by back_with_error(), but only on the page it was sent back to: other pages (another
+ * tab, say) leave it alone. Once it's older than OLD_INPUT_TTL it's thrown away, so it can't turn up later.
+ */
+function take_old_input(): array
+{
+    $kept = $_SESSION['old_input'] ?? null;
+    if (!$kept) {
+        return [];
+    }
+    if (time() - $kept['at'] > OLD_INPUT_TTL) {
+        unset($_SESSION['old_input']);
+        return [];
+    }
+    if ($kept['path'] !== request_path()) {
+        return [];
+    }
+    unset($_SESSION['old_input']);
+    return $kept['fields'];
 }
 
 /** Render a view file (relative to app/views, no extension) and return the HTML. */
@@ -80,10 +143,10 @@ function render(string $view, array $data = []): string
     return (string)ob_get_clean();
 }
 
-/** Render a full page inside the layout. */
+/** Render a full page inside the layout. Views get $old: input kept from a failed form submit, if any. */
 function page(string $view, array $data = [], string $title = 'Quartermaster'): never
 {
-    $content = render($view, $data);
+    $content = render($view, $data + ['old' => take_old_input()]);
     echo render('layout', ['content' => $content, 'title' => $title, 'active' => $data['active'] ?? '']);
     exit;
 }
