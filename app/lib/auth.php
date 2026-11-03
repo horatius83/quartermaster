@@ -166,6 +166,12 @@ function check_password(string $username, ?array $user, string $password, string
         q('DELETE FROM login_attempts WHERE username = ? AND ip = ?', [$username, $address]);
         return 'ok';
     }
+    if (!$user) {
+        // Spend as long as checking a real login's password does, so how fast the answer comes back doesn't
+        // tell a guesser which names exist. Hashing at the default cost takes as long as verifying a hash
+        // made at it (which every login's is after its next sign-in).
+        password_hash($password, PASSWORD_DEFAULT);
+    }
 
     q('DELETE FROM login_attempts WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - SIGN_IN_WINDOW)]);
     q('INSERT INTO login_attempts (username, ip, created_at) VALUES (?, ?, ?)', [$username, $address, now()]);
@@ -176,8 +182,18 @@ function check_password(string $username, ?array $user, string $password, string
         log_user('lockout', (int)$user['id'], $user['username'], $user['role'], "Too many wrong passwords {$where} {$from}");
     }
     if ($addressTries + 1 === SIGN_IN_TRIES_PER_ADDRESS) {
-        $names = array_column(q_all('SELECT DISTINCT username FROM login_attempts WHERE ip = ? ORDER BY username', [$address]), 'username');
-        log_user('lockout', null, '', '', SIGN_IN_TRIES_PER_ADDRESS . " wrong passwords {$from}, for: " . implode(', ', $names));
+        // Only names that are real logins are written down. Anything else may be a password typed into the
+        // username box by mistake, so it's only counted.
+        $logins = array_column(q_all(
+            'SELECT DISTINCT u.username FROM login_attempts a JOIN users u ON u.username = a.username WHERE a.ip = ? ORDER BY u.username',
+            [$address]
+        ), 'username');
+        $unknown = (int)q_val('SELECT COUNT(DISTINCT username) FROM login_attempts WHERE ip = ?', [$address]) - count($logins);
+        $for = $logins ? 'for: ' . implode(', ', $logins) : 'for no real login';
+        if ($unknown > 0) {
+            $for .= ($logins ? ', and ' : ', but ') . $unknown . ($unknown === 1 ? ' name with no login' : ' names with no login');
+        }
+        log_user('lockout', null, '', '', SIGN_IN_TRIES_PER_ADDRESS . " wrong passwords {$from}, {$for}");
     }
     return $blocked($nameTries + 1, $addressTries + 1) ? 'blocked' : 'wrong';
 }

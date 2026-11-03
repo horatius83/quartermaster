@@ -1,5 +1,5 @@
-import type { Browser, Page } from '@playwright/test';
-import { test, expect, signIn, signInAsDm, toasts, ADMIN, DM } from './fixtures';
+import type { Page } from '@playwright/test';
+import { test, expect, signIn, signInAsDm, toasts, ADMIN, DM, type OpenPage } from './fixtures';
 import { checkSession } from './php';
 
 const signInAsAdmin = (page: Page) => signIn(page, ADMIN.username, ADMIN.password);
@@ -21,9 +21,9 @@ async function expectSignInFails(page: Page, username: string, password: string)
   await expect(page.getByRole('alert')).toContainText('don’t match');
 }
 
-test('a DM changes their own password, and other sessions end', async ({ page, browser }) => {
+test('a DM changes their own password, and other sessions end', async ({ page, openPage }) => {
   // The same DM, signed in somewhere else.
-  const elsewhere = await (await browser.newContext()).newPage();
+  const elsewhere = await openPage();
   await signInAsDm(elsewhere);
 
   await signInAsDm(page);
@@ -54,11 +54,10 @@ test('a DM changes their own password, and other sessions end', async ({ page, b
   await expect(page.locator('table.ledger')).not.toContainText('dragon-hoard');
 });
 
-test('a copy of the session cookie stops working once its owner changes the password', async ({ page, browser }) => {
+test('a copy of the session cookie stops working once its owner changes the password', async ({ page, openPage }) => {
   await signInAsDm(page);
-  const thief = await browser.newContext();
-  await thief.addCookies(await page.context().cookies());
-  const thiefPage = await thief.newPage();
+  const thiefPage = await openPage();
+  await thiefPage.context().addCookies(await page.context().cookies());
   await thiefPage.goto('/dm');
   await expect(thiefPage).toHaveURL(/\/dm$/);
 
@@ -106,26 +105,26 @@ test('too many wrong passwords at sign-in pause that name, and it is logged', as
 });
 
 /** A page whose requests look like they come from $address (tests/e2e/config.php trusts X-Test-Client-IP). */
-async function pageFrom(browser: Browser, address: string): Promise<Page> {
-  const context = await browser.newContext({ extraHTTPHeaders: { 'X-Test-Client-IP': address } });
-  return context.newPage();
+function pageFrom(openPage: OpenPage, address: string): Promise<Page> {
+  return openPage({ extraHTTPHeaders: { 'X-Test-Client-IP': address } });
 }
 
-test('a name paused from one address can still sign in from another', async ({ browser }) => {
-  const stranger = await pageFrom(browser, '203.0.113.5');
+test('a name paused from one address can still sign in from another', async ({ openPage }) => {
+  const stranger = await pageFrom(openPage, '203.0.113.5');
   for (let i = 1; i <= 5; i++) {
     await tryToSignIn(stranger, DM.username, `wrong-${i}`);
   }
   await expect(stranger.getByRole('alert')).toContainText('Too many wrong passwords');
 
-  const home = await pageFrom(browser, '203.0.113.6');
+  const home = await pageFrom(openPage, '203.0.113.6');
   await signInAsDm(home);
   await expect(home).toHaveURL(/\/dm$/);
 });
 
-test('guesses spread over many names pause the address, and it is logged', async ({ browser }) => {
-  const sprayer = await pageFrom(browser, '203.0.113.7');
-  const names = ['dm', 'admin', 'gm', 'bryn', 'tamsin'];
+test('guesses spread over many names pause the address, and it is logged', async ({ openPage }) => {
+  const sprayer = await pageFrom(openPage, '203.0.113.7');
+  // One "name" is a password typed into the wrong box, which must never be written down.
+  const names = ['dm', 'admin', 'Sunken-Crown-77', 'bryn', 'tamsin'];
   for (let round = 1; round <= 4; round++) {
     for (const name of names) {
       await tryToSignIn(sprayer, name, `wrong-${round}`);
@@ -136,19 +135,20 @@ test('guesses spread over many names pause the address, and it is logged', async
   await tryToSignIn(sprayer, 'oskar', 'adventure');
   await expect(sprayer.getByRole('alert')).toContainText('Too many wrong passwords');
 
-  const admin = await pageFrom(browser, '203.0.113.8');
+  const admin = await pageFrom(openPage, '203.0.113.8');
   await signInAsAdmin(admin);
   await admin.goto('/admin/log');
   const first = admin.locator('table.ledger tbody tr').first();
   await expect(first).toContainText('Too many wrong passwords from one address');
   await expect(first).toContainText('from 203.0.113.7');
-  await expect(first).toContainText('for: admin, bryn, dm, gm, tamsin');
+  await expect(first).toContainText('for: admin, bryn, dm, tamsin, and 1 name with no login');
+  await expect(admin.locator('table.ledger')).not.toContainText('Sunken-Crown-77');
 });
 
-test('other people’s wrong passwords at a shared address don’t sign a DM out', async ({ browser }) => {
-  const dm = await pageFrom(browser, '203.0.113.9');
+test('other people’s wrong passwords at a shared address don’t sign a DM out', async ({ openPage }) => {
+  const dm = await pageFrom(openPage, '203.0.113.9');
   await signInAsDm(dm);
-  const players = await pageFrom(browser, '203.0.113.9');
+  const players = await pageFrom(openPage, '203.0.113.9');
   for (let i = 1; i <= 20; i++) {
     await tryToSignIn(players, `player-${i % 4}`, 'typo');
   }
@@ -187,8 +187,8 @@ test('the admin changes their own password', async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/users$/);
 });
 
-test('the admin resets a DM’s password, which signs the DM out', async ({ page, browser }) => {
-  const dmPage = await (await browser.newContext()).newPage();
+test('the admin resets a DM’s password, which signs the DM out', async ({ page, openPage }) => {
+  const dmPage = await openPage();
   await signInAsDm(dmPage);
 
   await signInAsAdmin(page);
