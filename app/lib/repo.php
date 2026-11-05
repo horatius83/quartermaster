@@ -300,7 +300,7 @@ function item_by_name(string $name): ?array
 }
 
 /** Find a catalog item by name, or create it with the given details. */
-function find_or_create_item(string $name, int $categoryId, float $weight, int $priceCp): array
+function find_or_create_item(string $name, int $categoryId, float $weight, int $priceCp, string $description = ''): array
 {
     $item = item_by_name($name);
     if ($item) {
@@ -310,8 +310,8 @@ function find_or_create_item(string $name, int $categoryId, float $weight, int $
         $categoryId = (int)categories()[0]['id'];
     }
     $id = insert(
-        'INSERT INTO items (name, category_id, weight, price_cp) VALUES (?, ?, ?, ?)',
-        [$name, $categoryId, max(0, $weight), max(0, $priceCp)]
+        'INSERT INTO items (name, category_id, weight, price_cp, description) VALUES (?, ?, ?, ?, ?)',
+        [$name, $categoryId, max(0, $weight), max(0, $priceCp), $description === '' ? null : $description]
     );
     return q_one('SELECT * FROM items WHERE id = ?', [$id]);
 }

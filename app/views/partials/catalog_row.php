@@ -3,7 +3,11 @@ $attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="closest tr" hx
 <tr>
   <td>
     <label class="visually-hidden" for="cn-<?= $id ?>">Name</label>
-    <input class="input-sm" style="width:100%;min-width:180px" id="cn-<?= $id ?>" name="name" value="<?= e($i['name']) ?>" maxlength="150" <?= $attrs ?>>
+    <input class="input-sm" style="width:100%;min-width:160px" id="cn-<?= $id ?>" name="name" value="<?= e($i['name']) ?>" maxlength="150" <?= $attrs ?>>
+  </td>
+  <td>
+    <label class="visually-hidden" for="cd-<?= $id ?>">Description</label>
+    <textarea class="input-sm" style="display:block;width:100%;min-width:140px;resize:vertical" id="cd-<?= $id ?>" name="description" rows="2" maxlength="1000" <?= $attrs ?>><?= e($i['description']) ?></textarea>
   </td>
   <td>
     <label class="visually-hidden" for="cc-<?= $id ?>">Category</label>

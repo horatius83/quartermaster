@@ -11,6 +11,7 @@
     </label>
     <label class="field tiny">Weight (lb) <input name="weight" type="number" min="0" step="0.01" value="0"></label>
     <label class="field tiny">Price <input name="price" placeholder="15 gp"></label>
+    <label class="field" style="flex:1 1 100%">Description <textarea name="description" rows="2" maxlength="1000" placeholder="Holds far more than it should."></textarea></label>
     <button class="btn btn-primary" type="submit">Add item</button>
   </form>
 
@@ -29,7 +30,7 @@
 
   <div class="table-wrap">
     <table class="ledger">
-      <thead><tr><th>Name</th><th>Category</th><th>Weight (lb)</th><th>Base price</th><th>In use</th><th class="right">Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Description</th><th>Category</th><th>Weight (lb)</th><th>Base price</th><th>In use</th><th class="right">Actions</th></tr></thead>
       <?= render('partials/catalog_body', ['items' => $items]) ?>
     </table>
   </div>

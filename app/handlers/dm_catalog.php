@@ -63,7 +63,7 @@ function dm_catalog_create(): void
     if ($priceText !== '' && $price === null) {
         htmx_fail('Write prices like “15 gp”, “5 sp” or “1 gp 5 sp”.');
     }
-    find_or_create_item($name, post_int('category_id'), post_float('weight'), $price ?? 0);
+    find_or_create_item($name, post_int('category_id'), post_float('weight'), $price ?? 0, post_str('description', 1000));
     toast("Added {$name} to the catalog.");
     header('HX-Trigger-After-Swap: ' . json_encode(['qm-reset' => ['form' => '#catalog-form']]));
     fragment('partials/catalog_body', ['items' => catalog_rows()]);
@@ -83,9 +83,10 @@ function dm_catalog_update(int $id): void
         htmx_fail('Write prices like “15 gp”, “5 sp” or “1 gp 5 sp”.');
     }
     $catId = category_by_id(post_int('category_id')) ? post_int('category_id') : (int)$item['category_id'];
+    $description = post_str('description', 1000);
     q(
-        'UPDATE items SET name = ?, category_id = ?, weight = ?, price_cp = ? WHERE id = ?',
-        [$name, $catId, max(0, post_float('weight')), $price, $id]
+        'UPDATE items SET name = ?, category_id = ?, weight = ?, price_cp = ?, description = ? WHERE id = ?',
+        [$name, $catId, max(0, post_float('weight')), $price, $description === '' ? null : $description, $id]
     );
     toast("Saved {$name}.");
     fragment('partials/catalog_row', ['i' => catalog_item($id)]);
