@@ -1,4 +1,4 @@
-# Uploads app/ and public/ to Hostinger over FTP whenever they change on main.
+# Uploads app/ and public/ to Hostinger over FTP. Runs only when started by hand from the Actions tab.
 #
 # Needs one secret under the repository's Settings > Secrets and variables > Actions:
 #   - FTP_PASSWORD: the password for the FTP account below.
@@ -9,12 +9,6 @@
 name: Deploy to Hostinger
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "app/**"
-      - "public/**"
-      - ".github/workflows/deploy.yml"
   workflow_dispatch:
     inputs:
       dry_run:
