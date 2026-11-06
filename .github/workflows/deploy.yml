@@ -1,0 +1,71 @@
+# Uploads app/ and public/ to Hostinger over FTP whenever they change on main.
+#
+# Needs one secret under the repository's Settings > Secrets and variables > Actions:
+#   - FTP_PASSWORD: the password for the FTP account below.
+#
+# Only changed files are uploaded. The action keeps a list of what it has deployed in a
+# .ftp-deploy-sync-state.json file in each remote folder, and only ever deletes files on that list,
+# so anything else on the server is left alone. app/config.php is never uploaded or deleted.
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "public/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List what would change without touching the server"
+        type: boolean
+        default: false
+
+# Let a running upload finish, then deploy the newest commit, so two uploads never overlap.
+concurrency:
+  group: deploy-hostinger
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # A bare host: the action adds the protocol itself, so no ftp:// here.
+  FTP_SERVER: 157.173.209.112
+  FTP_USERNAME: u552484070.ghactions
+  # Relative to the folder the FTP account opens in, which is public_html. Both must end with a slash.
+  # app/ ends up inside the web root, where public/.htaccess refuses to serve it.
+  REMOTE_APP_DIR: app/
+  REMOTE_PUBLIC_DIR: ./
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # app/ goes first so that new public files never run against old application code.
+      - name: Upload app/
+        uses: SamKirkland/FTP-Deploy-Action@110f9186c050f71550953127052e77650219c287 # v4.4.0
+        with:
+          server: ${{ env.FTP_SERVER }}
+          username: ${{ env.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./app/
+          server-dir: ${{ env.REMOTE_APP_DIR }}
+          dry-run: ${{ inputs.dry_run == true }}
+          exclude: |
+            **/config.php
+
+      - name: Upload public/
+        uses: SamKirkland/FTP-Deploy-Action@110f9186c050f71550953127052e77650219c287 # v4.4.0
+        with:
+          server: ${{ env.FTP_SERVER }}
+          username: ${{ env.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./public/
+          server-dir: ${{ env.REMOTE_PUBLIC_DIR }}
+          dry-run: ${{ inputs.dry_run == true }}
