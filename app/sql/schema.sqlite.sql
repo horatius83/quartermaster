@@ -57,6 +57,13 @@ CREATE TABLE items (
   description TEXT NULL
 );
 
+-- The DM's labels on an item ("simple", "ranged"), always lowercase.
+CREATE TABLE item_tags (
+  item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  tag     TEXT NOT NULL,
+  PRIMARY KEY (item_id, tag)
+);
+
 CREATE TABLE inventory (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,

@@ -236,8 +236,13 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.05; m
   border: 1.5px solid var(--ink-soft); border-radius: 999px;
   background: transparent; color: var(--ink);
 }
-.chip[aria-current="true"] { background: var(--clay); border-color: var(--clay); color: #fff; }
+.chip[aria-current="true"], .chip:has(input:checked) { background: var(--clay); border-color: var(--clay); color: #fff; }
+.chip:has(input:focus-visible) { outline: 2px solid var(--clay); outline-offset: 2px; }
+label.chip { position: relative; }
+.chip-sm { min-height: 30px; font-size: 15px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.item-tag { padding: 0 8px; font-size: 14px; color: var(--ink-soft); border: 1px solid var(--rule); border-radius: 999px; }
 
 label.field { display: flex; flex-direction: column; gap: 2px; font-size: 15px; color: var(--ink-soft); }
 .input, .field input, .field select, .field textarea {

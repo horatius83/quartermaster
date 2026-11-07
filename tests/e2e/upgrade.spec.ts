@@ -9,6 +9,8 @@ const UPGRADED = {
   userLog: 0,
   // Upgrade 004: every login starts at session version 0 (dm, bryn, then the two admins added after).
   sessionVersions: [0, 0, 0, 0],
+  // Upgrade 005: the table is there, with nothing tagged yet.
+  itemTags: 0,
   characters: [1, 1],
   stores: [1],
   log: [1, 1],

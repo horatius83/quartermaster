@@ -213,6 +213,27 @@ function get_str(string $key, int $max = 100): string
     return mb_substr(trim((string)($_GET[$key] ?? '')), 0, $max);
 }
 
+/** Lists of tags as one, without repeats, sorted by bytes the way the database sorts them. */
+function merge_tags(array ...$lists): array
+{
+    $tags = array_unique(array_merge(...$lists));
+    sort($tags, SORT_STRING);
+    return $tags;
+}
+
+/** Comma-separated text as tags: lowercase, single-spaced, sorted, no repeats. "Ranged, simple,ranged" → ['ranged', 'simple']. */
+function parse_tags(string $text): array
+{
+    $tags = array_map(fn($t) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', $t) ?? '')), explode(',', $text));
+    return merge_tags(array_filter($tags, fn($t) => $t !== ''));
+}
+
+/** The tags being filtered by, from a request's tag[]=simple&tag[]=ranged. $source is $_GET or $_POST. */
+function filter_tags(array $source): array
+{
+    return parse_tags(implode(',', array_filter((array)($source['tag'] ?? []), 'is_string')));
+}
+
 function fmt_weight(float|string $w): string
 {
     $w = round((float)$w, 2);

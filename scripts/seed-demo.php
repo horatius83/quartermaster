@@ -54,6 +54,16 @@ transaction(function () use ($cat) {
         $item[$name] = insert('INSERT INTO items (name, category_id, weight, price_cp) VALUES (?, ?, ?, ?)', [$name, $cat[$slug], $w, $price]);
     }
 
+    $tags = [
+        'Longsword' => ['martial', 'melee'], 'Battleaxe' => ['martial', 'melee'], 'Warhammer' => ['martial', 'melee'],
+        'Shortbow' => ['ranged', 'simple'], 'Longbow' => ['martial', 'ranged'], 'Light crossbow' => ['ranged', 'simple'],
+        'Dagger' => ['melee', 'simple'], 'Quarterstaff' => ['melee', 'simple'],
+        'Chain mail' => ['heavy'], 'Scale mail' => ['medium'], 'Leather armor' => ['light'],
+    ];
+    foreach ($tags as $itemName => $itemTags) {
+        set_item_tags($item[$itemName], $itemTags);
+    }
+
     $stores = [
         ['The Rusty Anvil', 'Smithy', 'Steel, mail and plate. Repairs while you wait.', 1,
             [['Longsword', 4], ['Battleaxe', 2], ['Warhammer', 1], ['Chain mail', 1], ['Scale mail', 2], ['Shield', null], ['Smith’s tools', 3]]],
