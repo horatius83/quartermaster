@@ -31,7 +31,7 @@ env:
   # Relative to the folder the FTP account opens in, which is public_html. Both must end with a slash.
   # app/ ends up inside the web root, where public/.htaccess refuses to serve it.
   REMOTE_APP_DIR: app/
-  REMOTE_PUBLIC_DIR: ./
+  REMOTE_PUBLIC_DIR: ./s/lousy/apps/quartermaster/
 
 jobs:
   deploy:
