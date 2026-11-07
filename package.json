@@ -6,6 +6,7 @@
     "test": "playwright test",
     "test:chromium": "playwright test --project=chromium",
     "test:docker": "node tests/e2e/docker.mjs",
+    "test:mysql": "node tests/mysql/run.mjs",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report"

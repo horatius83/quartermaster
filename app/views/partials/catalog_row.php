@@ -1,6 +1,6 @@
 <?php $u = url('/dm/catalog/' . $i['id']); $id = (int)$i['id'];
-$attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="closest tr" hx-target="closest tr" hx-swap="outerHTML"'; ?>
-<tr>
+$attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="#cr-' . $id . ', [name=q], #cat-filter, #tag-filter" hx-target="closest tr" hx-swap="outerHTML" hx-disabled-elt="#cr-' . $id . ' input, #cr-' . $id . ' textarea, #cr-' . $id . ' select"'; ?>
+<tr id="cr-<?= $id ?>">
   <td>
     <label class="visually-hidden" for="cn-<?= $id ?>">Name</label>
     <input class="input-sm" style="width:100%;min-width:160px" id="cn-<?= $id ?>" name="name" value="<?= e($i['name']) ?>" maxlength="150" <?= $attrs ?>>
@@ -8,6 +8,8 @@ $attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="closest tr" hx
   <td>
     <label class="visually-hidden" for="cd-<?= $id ?>">Description</label>
     <textarea class="input-sm" style="display:block;width:100%;min-width:140px;resize:vertical" id="cd-<?= $id ?>" name="description" rows="2" maxlength="1000" <?= $attrs ?>><?= e($i['description']) ?></textarea>
+    <label class="visually-hidden" for="ct-<?= $id ?>">Tags</label>
+    <input class="input-sm" style="display:block;width:100%;margin-top:4px" id="ct-<?= $id ?>" name="tags" value="<?= e(implode(', ', $i['tags'])) ?>" maxlength="255" placeholder="Tags, separated by commas" <?= $attrs ?>>
   </td>
   <td>
     <label class="visually-hidden" for="cc-<?= $id ?>">Category</label>

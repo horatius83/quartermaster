@@ -303,9 +303,12 @@ function item_by_name(string $name): ?array
 function find_or_create_item(string $name, int $categoryId, float $weight, int $priceCp, string $description = ''): array
 {
     $item = item_by_name($name);
-    if ($item) {
-        return $item;
-    }
+    return $item ?? create_item($name, $categoryId, $weight, $priceCp, $description);
+}
+
+/** Add an item to the catalog. Throws PDOException if the name is taken. */
+function create_item(string $name, int $categoryId, float $weight, int $priceCp, string $description = ''): array
+{
     if (!category_by_id($categoryId)) {
         $categoryId = (int)categories()[0]['id'];
     }
@@ -314,6 +317,47 @@ function find_or_create_item(string $name, int $categoryId, float $weight, int $
         [$name, $categoryId, max(0, $weight), max(0, $priceCp), $description === '' ? null : $description]
     );
     return q_one('SELECT * FROM items WHERE id = ?', [$id]);
+}
+
+const MAX_TAG_LENGTH = 30;
+
+/** Replace an item's tags. Call inside a transaction. */
+function set_item_tags(int $itemId, array $tags): void
+{
+    q('DELETE FROM item_tags WHERE item_id = ?', [$itemId]);
+    foreach ($tags as $tag) {
+        q('INSERT INTO item_tags (item_id, tag) VALUES (?, ?)', [$itemId, $tag]);
+    }
+}
+
+/** Give each row a 'tags' list, looking up the item whose id is in $idKey. */
+function with_item_tags(array $rows, string $idKey = 'id'): array
+{
+    if (!$rows) {
+        return [];
+    }
+    $ids = array_map('intval', array_column($rows, $idKey));
+    $found = q_all('SELECT item_id, tag FROM item_tags WHERE item_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY tag', $ids);
+    $byItem = [];
+    foreach ($found as $f) {
+        $byItem[(int)$f['item_id']][] = $f['tag'];
+    }
+    foreach ($rows as &$row) {
+        $row['tags'] = $byItem[(int)$row[$idKey]] ?? [];
+    }
+    return $rows;
+}
+
+/** The rows (from with_item_tags) carrying every one of $tags. */
+function having_tags(array $rows, array $tags): array
+{
+    return array_values(array_filter($rows, fn($r) => !array_diff($tags, $r['tags'])));
+}
+
+/** Every tag in use anywhere in the catalog. */
+function all_tags(): array
+{
+    return array_column(q_all('SELECT DISTINCT tag FROM item_tags ORDER BY tag'), 'tag');
 }
 
 function stores_summary(): array
@@ -330,21 +374,16 @@ function store(int $id): ?array
     return q_one('SELECT * FROM stores WHERE id = ? AND campaign_id = ?', [$id, campaign_id()]);
 }
 
-function store_stock_rows(int $storeId, string $categorySlug = ''): array
+function store_stock_rows(int $storeId): array
 {
     $sql = 'SELECT st.id, st.store_id, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
                    cat.name AS category, cat.slug AS category_slug
               FROM store_stock st
               JOIN items i ON i.id = st.item_id
               JOIN categories cat ON cat.id = i.category_id
-             WHERE st.store_id = ?';
-    $params = [$storeId];
-    if ($categorySlug !== '') {
-        $sql .= ' AND cat.slug = ?';
-        $params[] = $categorySlug;
-    }
-    $sql .= ' ORDER BY cat.sort_order, i.name';
-    return q_all($sql, $params);
+             WHERE st.store_id = ?
+             ORDER BY cat.sort_order, i.name';
+    return q_all($sql, [$storeId]);
 }
 
 function stock_row(int $id): ?array

@@ -58,8 +58,9 @@ Older databases are brought up to date automatically on the first request after 
 - **003, admin:** adds the admin login and the account log, and gives every campaign an owning DM. Existing campaigns go to your oldest DM login. Afterwards, sign in as a DM and use *Create the admin account*. If you had more than one DM login, sign in as the admin and use *Hand over* under *Users* to give each campaign back to the DM who runs it. If the database had no DM login at all, `/setup` opens again and the DM it makes takes every campaign.
 
 - **004, sign-in:** lets a new password sign that login out everywhere else, and adds the table that limits wrong passwords. Everyone has to sign in again once after this upgrade.
+- **005, item tags:** adds the table for the tags DMs put on catalog items. Safe to run again.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003 and 004 only once each: unlike 001, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003 and 004 only once each: unlike 001 and 005, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
@@ -100,6 +101,8 @@ npm test
 
 The tests start PHP's built-in server on port 8099 with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite file in the system temp folder. Every test starts from a fresh demo seed, so your `app/config.php` and database are never touched.
 
+Those tests all use SQLite. `npm run test:mysql` checks the item tags upgrade and table against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
+
 PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
 
 ## Project layout
@@ -113,6 +116,7 @@ app/views/         PHP templates; views/partials/ are the fragments htmx swaps i
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 scripts/           seed-demo.php, dev-router.php
 tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
+tests/mysql/       checks of the item tags table against real MySQL and MariaDB (npm run test:mysql)
 ```
 
 ## How htmx is used
@@ -123,12 +127,16 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | --- | --- | --- |
 | Pack quantity − / + | `POST /dm/inv/{id}/qty` | that table row, plus the carried-weight line (out-of-band) |
 | Category filter chips | `GET /dm/inventory/{id}?cat=…` | the table body; the URL is pushed to history |
+| Tag filter chips | `GET /shop/{id}?tag[]=…`, `GET /dm/catalog?tag[]=…` | the wares or the table body, showing items with every chosen tag; the URL is pushed to history |
 | Give item / stock item | `POST …/give`, `…/stock` | the table body; the form resets |
 | Item name suggestions | `GET /dm/catalog/suggest` | the `<datalist>` options |
-| Inline price, stock and catalog edits | `POST` on `change` | that row |
+| Inline price and stock edits | `POST` on `change` | that row |
+| Inline catalog edits | `POST /dm/catalog/{id}` on `change` | that row, or the whole table if the edit takes it out of the filters; the tag filter fetches itself again if the tags in use changed |
 | Add to cart, ± in cart, submit, withdraw | `POST /shop/…` | the cart panel |
 | Pack history “Show older” | `GET /dm/history?before=…`, `GET /history?before=…` | replaces the button row with the next 50 entries |
 | Approve / decline / adjust cart | `POST /dm/carts/…` | that cart card, plus the sidebar badge |
+
+A catalog row posts all its fields when one changes, so a row showing old values would save them over newer ones. Four things keep rows current: Back and Forward reload the page from the server (`hx-history="false"`), a row locks while it saves, all rows lock while the table redraws (`hx-disabled-elt`), and a redraw waits for saves in flight (`public/assets/app.js`). Don't use `hx-sync` with `queue` for this: htmx silently drops a queued request once the response before it has replaced its element. The shop also opts out of history snapshots, because they'd show an old cart and old stock counts.
 
 Messages are sent as an `HX-Trigger: {"qm-toast": …}` header and shown by `public/assets/app.js`. Errors come back as a 200 status with `HX-Reswap: none` and an error toast, because htmx won't swap 4xx responses. The CSRF token is sent on every htmx request via `hx-headers` on `<body>`.
 

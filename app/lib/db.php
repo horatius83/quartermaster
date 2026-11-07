@@ -45,6 +45,7 @@ const UPGRADES = [
     '002-campaigns'     => 'SELECT campaign_id FROM inventory_log LIMIT 1',
     '003-admin'         => 'SELECT 1 FROM user_log LIMIT 1',
     '004-sign-in'       => 'SELECT 1 FROM login_attempts LIMIT 1',
+    '005-item-tags'     => 'SELECT 1 FROM item_tags LIMIT 1',
 ];
 
 /**

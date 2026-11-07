@@ -69,6 +69,15 @@ CREATE TABLE items (
   CONSTRAINT fk_items_category FOREIGN KEY (category_id) REFERENCES categories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- The DM's labels on an item ("simple", "ranged"). The app lowercases them before saving; the binary collation
+-- keeps tags apart exactly as the app does, so "café" and "cafe" can sit on one item.
+CREATE TABLE item_tags (
+  item_id INT UNSIGNED NOT NULL,
+  tag     VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  PRIMARY KEY (item_id, tag),
+  CONSTRAINT fk_item_tags_item FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE inventory (
   id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   character_id INT UNSIGNED NOT NULL,

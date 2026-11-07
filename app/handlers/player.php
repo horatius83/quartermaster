@@ -55,30 +55,36 @@ function shop(int $storeId): void
     $char = require_player();
     $store = player_store($char, $storeId);
     $cat = get_str('cat', 30);
+    $tags = filter_tags($_GET);
 
-    $wares = store_stock_rows($storeId);
+    $stock = with_item_tags(store_stock_rows($storeId), 'item_id');
+    $inCategory = $cat === '' ? $stock : array_filter($stock, fn($w) => $w['category_slug'] === $cat);
+    $shown = having_tags($inCategory, $tags);
+
+    // So no pick leads nowhere, the categories on offer have wares with the picked tags, and the tags on offer are
+    // on the wares showing. The current category and tags stay listed too, so they can be undone.
     $catsHere = [];
-    foreach ($wares as $w) {
-        $catsHere[$w['category_slug']] = $w['category'];
+    foreach ($stock as $w) {
+        if ($w['category_slug'] === $cat || !array_diff($tags, $w['tags'])) {
+            $catsHere[$w['category_slug']] = $w['category'];
+        }
     }
 
+    $waresView = [
+        'store' => $store, 'wares' => $shown,
+        'catsHere' => $catsHere, 'cat' => $cat, 'tags' => $tags,
+        'tagsHere' => merge_tags($tags, ...array_column($shown, 'tags')),
+    ];
     if (htmx_target() === 'wares') {
-        fragment('partials/shop_wares', [
-            'store' => $store, 'wares' => $cat === '' ? $wares : store_stock_rows($storeId, $cat),
-            'catsHere' => $catsHere, 'cat' => $cat,
-        ]);
+        fragment('partials/shop_wares', $waresView);
     }
 
     $cart = active_cart((int)$char['id'], $storeId);
 
-    page('player/shop', [
+    page('player/shop', $waresView + [
         'active'   => 'shop',
         'char'     => $char,
-        'store'    => $store,
         'stores'   => stores_for_character((int)$char['id']),
-        'wares'    => $cat === '' ? $wares : store_stock_rows($storeId, $cat),
-        'catsHere' => $catsHere,
-        'cat'      => $cat,
         'cart'     => $cart ? cart_detail((int)$cart['id']) : null,
     ], $store['name']);
 }

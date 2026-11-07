@@ -42,6 +42,27 @@
     }
   });
 
+  // A catalog redraw waits for row saves in flight. If it overtook one, the table would show the row's old
+  // values, and the next edit to that row would save them over the new ones. (See views/dm/catalog.php.)
+  var rowSaves = 0;
+  var waitingRedraws = [];
+  document.addEventListener('htmx:beforeRequest', function (evt) {
+    if (!evt.detail.elt.closest('#catalog-body')) return;
+    rowSaves++;
+    evt.detail.xhr.addEventListener('loadend', function () {
+      rowSaves--;
+      if (rowSaves === 0) {
+        waitingRedraws.splice(0).forEach(function (redraw) { redraw(true); });
+      }
+    });
+  });
+  document.addEventListener('htmx:confirm', function (evt) {
+    if (rowSaves > 0 && evt.detail.target && evt.detail.target.id === 'catalog-body') {
+      evt.preventDefault();
+      waitingRedraws.push(evt.detail.issueRequest);
+    }
+  });
+
   // Network trouble: let the user know instead of failing silently.
   document.addEventListener('htmx:sendError', function () {
     showToast('Could not reach the server. Check your connection.', 'error');

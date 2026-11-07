@@ -47,6 +47,7 @@ echo json_encode([
     'admins'     => (int)q_val("SELECT COUNT(*) FROM users WHERE role = 'admin'"),
     'userLog'    => (int)q_val('SELECT COUNT(*) FROM user_log'),
     'sessionVersions' => array_map('intval', array_column(q_all('SELECT session_version FROM users ORDER BY id'), 'session_version')),
+    'itemTags'   => (int)q_val('SELECT COUNT(*) FROM item_tags'),
     'characters' => $campaignOf('characters'),
     'stores'     => $campaignOf('stores'),
     'log'        => $campaignOf('inventory_log'),
