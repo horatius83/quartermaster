@@ -2,11 +2,11 @@
 
 A small web app for running a tabletop RPG's economy. The DM keeps every player's pack and purse, opens shops with their own stock, and approves what players put in their carts.
 
-- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog, approve or decline carts, and review the history of every pack and purse.
+- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system and load the SRD's gear into it, approve or decline carts, and review the history of every pack and purse.
 - **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack and its history.
 - **Admin:** add and delete DMs and other logins, and read the account log of every login added or deleted.
 
-Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals) and is loaded from a CDN.
+Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals). htmx and the fonts are served from `public/assets`, so pages load nothing from other sites. Their licences are alongside them, and they need to stay deployed with them.
 
 ## How money works
 
@@ -23,9 +23,19 @@ All four steps happen in one transaction.
 
 ## Campaigns
 
-One DM login can run several campaigns, and each DM sees only their own. Each campaign has its own party, stores, carts and pack history; the item catalog is shared by every campaign and every DM, so each can stock the same gear at its own prices. The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters and stores are gone.
+One DM login can run several campaigns, and each DM sees only their own. Each campaign has its own party, stores, carts and pack history; the item catalog is shared by every campaign of the same system and by every DM, so each can stock the same gear at its own prices (see *Systems and the SRD items*). The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters and stores are gone.
 
 Each player login belongs to one character, so it sees only that character's campaign. Someone playing in two campaigns gets a login for each.
+
+## Systems and the SRD items
+
+Each campaign plays one system, 5e, 3.5e, Pathfinder 1e or Pathfinder 2e. It's chosen when the campaign starts and can't be changed; a DM with no campaign yet is asked to start one before anything else. To fix a wrong choice, start another campaign and delete the empty one. (Campaigns from before systems can set theirs once: see upgrade 007.) To add a system, add it to `CAMPAIGN_RULESETS` in `app/lib/repo.php`.
+
+Each catalog item belongs to one system, and its name only has to be unique within that system (the unique key is system + name), so the 5e and 3.5e Longswords are separate items with their own weight, price and description. A campaign only sees its own system's items and tags, in the catalog and in the give and stock forms, and a name typed there that's new is added to that system. Campaigns of the same system share its items, including other DMs' campaigns. The catalog shows 50 items a page, so a newly added item may land on another page: search for it to find it.
+
+*Load 5e SRD items* on the catalog page adds that system's weapons, armor, ammunition, gear and tools from `app/data/srd-5e.php` or `app/data/srd-3.5e.php`. It skips any name that system already has, so a DM's own prices and descriptions are never overwritten. It can be run again, which also brings back SRD items someone deleted. Magic items and mounts aren't included. Because weapons have no damage columns, damage goes in the description and properties in the tags. Pathfinder has no items to load, so DMs add their own.
+
+The 5e data comes from SRD 5.1 (CC BY 4.0) by way of the [5e-bits database](https://github.com/5e-bits/5e-database), and the 3.5e data from the System Reference Document (Open Game License 1.0a). Both require notices, which are in `public/assets/srd-notices.txt` and linked from the DM sidebar and the foot of every player page. Keep that file deployed with the data.
 
 ## Logins and the admin
 
@@ -59,8 +69,10 @@ Older databases are brought up to date automatically on the first request after 
 
 - **004, sign-in:** lets a new password sign that login out everywhere else, and adds the table that limits wrong passwords. Everyone has to sign in again once after this upgrade.
 - **005, item tags:** adds the table for the tags DMs put on catalog items. Safe to run again.
+- **006, rulesets:** gives items and campaigns a system and makes item names unique per system. Everything existing starts as 5e.
+- **007, system choice:** lets each existing campaign set its real system once, under *Campaigns*, which copies the items that campaign uses (in its packs, on its shelves, in its carts and its history) into that system and moves the campaign to the copies. Catalog items it doesn't use stay 5e only, so re-add any you want. The 5e originals stay for campaigns that really are 5e; if none are, delete the leftovers from a 5e campaign's catalog should you ever start one. Do this before loading SRD items, which the catalog page won't allow until the campaign's system is set. A name the chosen system already has means that item, so a pack holding it takes on that item's weight and description.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003 and 004 only once each: unlike 001 and 005, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006 and 007 only once each: unlike 001 and 005, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
@@ -99,24 +111,25 @@ npm test
 
 `npm run test:chromium` runs just Chromium. `npm run test:docker` runs both browsers inside Microsoft's Playwright Linux image with PHP added (`tests/e2e/Dockerfile`), so you only need Docker and `npm install`: no PHP or browsers on the host. Use it where a browser won't run locally: Playwright's Firefox build fails to start on some Windows 11 machines with a "side-by-side configuration" error. Arguments after `--` go to Playwright, e.g. `npm run test:docker -- --project=firefox`. The first run downloads the image (about 2 GB).
 
-The tests start PHP's built-in server on port 8099 with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite file in the system temp folder. Every test starts from a fresh demo seed, so your `app/config.php` and database are never touched.
+The tests start PHP's built-in server on port 8099 with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite file in `/dev/shm` (memory-backed storage, so writes don't wait on the disk), or in the system temp folder where there's no `/dev/shm`. Every test starts from a fresh demo seed, so your `app/config.php` and database are never touched.
 
-Those tests all use SQLite. `npm run test:mysql` checks the item tags upgrade and table against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
+Those tests all use SQLite. `npm run test:mysql` checks the item tags and rulesets upgrades, the tags table and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
 
-PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
+PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. With WSL's default networking, Windows reaches that server through a relay, and the odd browser request can fail with `net::ERR_ADDRESS_IN_USE`. Setting `networkingMode=mirrored` under `[wsl2]` in `%USERPROFILE%\.wslconfig`, then running `wsl --shutdown`, removes the relay. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
 
 ## Project layout
 
 ```
-public/            web root: index.php (routes), .htaccess, assets/ (CSS, JS)
+public/            web root: index.php (routes), .htaccess, assets/ (CSS, JS, htmx, fonts)
 app/bootstrap.php  loads config, libraries and handlers
 app/lib/           db (PDO helpers), auth (sessions, CSRF), money, router, shared queries
 app/handlers/      one file per area: auth, campaigns, party, inventory, stores, catalog, carts, player
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
+app/data/          the SRD items each system can load; their licence notices are in public/assets/srd-notices.txt
 scripts/           seed-demo.php, dev-router.php
 tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
-tests/mysql/       checks of the item tags table against real MySQL and MariaDB (npm run test:mysql)
+tests/mysql/       checks of item tags, rulesets and the SRD data against real MySQL and MariaDB (npm run test:mysql)
 ```
 
 ## How htmx is used
@@ -126,6 +139,8 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | Interaction | Request | Swaps |
 | --- | --- | --- |
 | Pack quantity − / + | `POST /dm/inv/{id}/qty` | that table row, plus the carried-weight line (out-of-band) |
+| Load SRD items | `POST /dm/catalog/import-srd` | the table body and pager; the tag filter fetches itself again |
+| Catalog pages | `GET /dm/catalog?page=…` | the table body and, out-of-band, the pager; the URL is pushed to history. Changing a filter goes back to page 1; saves, deletes and imports stay on the page |
 | Category filter chips | `GET /dm/inventory/{id}?cat=…` | the table body; the URL is pushed to history |
 | Tag filter chips | `GET /shop/{id}?tag[]=…`, `GET /dm/catalog?tag[]=…` | the wares or the table body, showing items with every chosen tag; the URL is pushed to history |
 | Give item / stock item | `POST …/give`, `…/stock` | the table body; the form resets |

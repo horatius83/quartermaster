@@ -1,5 +1,5 @@
 <?php $u = url('/dm/catalog/' . $i['id']); $id = (int)$i['id'];
-$attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="#cr-' . $id . ', [name=q], #cat-filter, #tag-filter" hx-target="closest tr" hx-swap="outerHTML" hx-disabled-elt="#cr-' . $id . ' input, #cr-' . $id . ' textarea, #cr-' . $id . ' select"'; ?>
+$attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="#cr-' . $id . ', ' . e(CATALOG_SAVE_INCLUDES) . '" hx-target="closest tr" hx-swap="outerHTML" hx-disabled-elt="#cr-' . $id . ' input, #cr-' . $id . ' textarea, #cr-' . $id . ' select"'; ?>
 <tr id="cr-<?= $id ?>">
   <td>
     <label class="visually-hidden" for="cn-<?= $id ?>">Name</label>
@@ -28,7 +28,8 @@ $attrs = 'hx-post="' . e($u) . '" hx-trigger="change" hx-include="#cr-' . $id . 
   <td class="muted"><?= (int)$i['uses'] ?: '—' ?></td>
   <td class="right">
     <?php if ((int)$i['uses'] === 0): ?>
-      <button class="link-btn danger" type="button" hx-post="<?= e($u . '/delete') ?>" hx-target="closest tr" hx-swap="outerHTML swap:300ms">Delete</button>
+      <?php // The id lets assets/app.js find this button again if saving this row replaces it while the delete waits. ?>
+      <button class="link-btn danger" id="cdel-<?= $id ?>" type="button" hx-post="<?= e($u . '/delete') ?>" hx-include="<?= e(CATALOG_SAVE_INCLUDES) ?>" hx-target="#catalog-body" hx-swap="outerHTML" hx-disabled-elt="<?= e(CATALOG_ROW_FIELDS) ?>">Delete</button>
     <?php endif; ?>
   </td>
 </tr>

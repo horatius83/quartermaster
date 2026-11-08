@@ -26,10 +26,13 @@ CREATE TABLE login_attempts (
 
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
 -- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.
+-- ruleset is the system it plays (see CAMPAIGN_RULESETS in lib/repo.php). It decides the catalog items it uses and never changes, except that a campaign from before systems has ruleset_open = 1 and can set it once.
 CREATE TABLE campaigns (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   owner_user_id INT UNSIGNED NULL,
   name          VARCHAR(100) NOT NULL,
+  ruleset       VARCHAR(10) NOT NULL DEFAULT '5e',
+  ruleset_open  TINYINT(1) NOT NULL DEFAULT 0,
   created_at    DATETIME NOT NULL,
   KEY ix_campaigns_owner (owner_user_id),
   CONSTRAINT fk_campaigns_owner FOREIGN KEY (owner_user_id) REFERENCES users(id)
@@ -58,14 +61,16 @@ CREATE TABLE categories (
   UNIQUE KEY uq_categories_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- An item belongs to one system, so each system can have its own Longsword, and a campaign only sees its own system's.
 CREATE TABLE items (
   id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  ruleset     VARCHAR(10) NOT NULL DEFAULT '5e',
   name        VARCHAR(150) NOT NULL,
   category_id INT UNSIGNED NOT NULL,
   weight      DECIMAL(8,2) NOT NULL DEFAULT 0,
   price_cp    INT NOT NULL DEFAULT 0,
   description TEXT NULL,
-  UNIQUE KEY uq_items_name (name),
+  UNIQUE KEY uq_items_ruleset_name (ruleset, name),
   CONSTRAINT fk_items_category FOREIGN KEY (category_id) REFERENCES categories(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

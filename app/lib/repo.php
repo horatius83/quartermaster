@@ -6,6 +6,12 @@ declare(strict_types=1);
 // (the DM's chosen campaign, or a player's own), so an id from another campaign reads as "not found".
 // Each DM sees only the campaigns they own, so another DM's campaign reads as "not found" too.
 
+/** The systems a campaign can play, as stored => shown. A campaign's is chosen when it starts and never changes (but see settle_campaign_system). */
+const CAMPAIGN_RULESETS = ['5e' => '5e', '3.5e' => '3.5e', 'pf1e' => 'Pathfinder 1e', 'pf2e' => 'Pathfinder 2e'];
+/** The systems with items to load, in app/data/srd-<system>.php. */
+const SRD_RULESETS = ['5e', '3.5e'];
+const DEFAULT_RULESET = '5e';
+
 /** The signed-in user's id, which owns the campaigns a DM sees. */
 function owner_id(): int
 {
@@ -34,9 +40,16 @@ function campaign(int $id): ?array
     return q_one('SELECT * FROM campaigns WHERE id = ? AND owner_user_id = ?', [$id, owner_id()]);
 }
 
-function create_campaign(string $name, int $ownerId): int
+function create_campaign(string $name, int $ownerId, string $ruleset = DEFAULT_RULESET): int
 {
-    return insert('INSERT INTO campaigns (owner_user_id, name, created_at) VALUES (?, ?, ?)', [$ownerId, $name, now()]);
+    return insert('INSERT INTO campaigns (owner_user_id, name, ruleset, ruleset_open, created_at) VALUES (?, ?, ?, 0, ?)', [$ownerId, $name, $ruleset, now()]);
+}
+
+/** The system picked on a form, if it's one a campaign can play. */
+function posted_campaign_ruleset(): string
+{
+    $ruleset = post_str('ruleset', 10);
+    return isset(CAMPAIGN_RULESETS[$ruleset]) ? $ruleset : DEFAULT_RULESET;
 }
 
 /** The campaign being viewed: the one the DM last picked (or the first), or the player's character's. */
@@ -57,8 +70,12 @@ function current_campaign(): ?array
         return $cached = null; // the admin runs no campaigns
     }
     $campaign = campaign((int)($_SESSION['campaign_id'] ?? 0))
-        ?? q_one('SELECT * FROM campaigns WHERE owner_user_id = ? ORDER BY id LIMIT 1', [$user['id']])
-        ?? campaign(create_campaign('My Campaign', (int)$user['id']));
+        ?? q_one('SELECT * FROM campaigns WHERE owner_user_id = ? ORDER BY id LIMIT 1', [$user['id']]);
+    if (!$campaign) {
+        // A new DM login, or one whose campaigns the admin handed on, starts one under Campaigns and picks its system
+        // there (see require_dm). Not cached, since that campaign may be created later in this request.
+        return null;
+    }
     $_SESSION['campaign_id'] = (int)$campaign['id'];
     return $cached = $campaign;
 }
@@ -66,6 +83,61 @@ function current_campaign(): ?array
 function campaign_id(): int
 {
     return (int)(current_campaign()['id'] ?? 0);
+}
+
+/** The system the current campaign plays. */
+function campaign_ruleset(): string
+{
+    return current_campaign()['ruleset'] ?? DEFAULT_RULESET;
+}
+
+/** A system's name as shown to people. */
+function ruleset_label(string $ruleset): string
+{
+    return CAMPAIGN_RULESETS[$ruleset] ?? $ruleset;
+}
+
+/**
+ * Say which system a campaign from before systems really plays, which can only happen once. Call inside a transaction.
+ * The upgrade labelled everything 5e, so the items this campaign uses (in its packs, on its shelves, in its carts and
+ * its history) are copied into the chosen system, and the campaign moves to the copies. Only those: the shared catalog
+ * also holds other DMs' items, which aren't this campaign's to take along. The originals stay, since other campaigns
+ * may really be 5e, and a name the chosen system already has means that item. Returns how many items were copied.
+ */
+function settle_campaign_system(array $campaign, string $ruleset): int
+{
+    $copied = 0;
+    if ($ruleset !== $campaign['ruleset']) {
+        $id = (int)$campaign['id'];
+        $used = q_all(
+            'SELECT * FROM items WHERE ruleset = ? AND id IN (
+                 SELECT inv.item_id FROM inventory inv JOIN characters ch ON ch.id = inv.character_id WHERE ch.campaign_id = ?
+                 UNION SELECT st.item_id FROM store_stock st JOIN stores s ON s.id = st.store_id WHERE s.campaign_id = ?
+                 UNION SELECT ci.item_id FROM cart_items ci JOIN carts c ON c.id = ci.cart_id JOIN stores s ON s.id = c.store_id WHERE s.campaign_id = ?
+                 UNION SELECT l.item_id FROM inventory_log l WHERE l.campaign_id = ?)',
+            [$campaign['ruleset'], $id, $id, $id, $id]
+        );
+        foreach (with_item_tags($used) as $item) {
+            $copy = item_by_name($item['name'], $ruleset);
+            if (!$copy) {
+                try {
+                    $copy = create_item($item['name'], (int)$item['category_id'], (float)$item['weight'], (int)$item['price_cp'], $item['description'] ?? '', $ruleset);
+                    set_item_tags((int)$copy['id'], $item['tags']);
+                    $copied++;
+                } catch (PDOException $e) {
+                    // Another DM's campaign copied the same name just now: use theirs.
+                    $copy = item_by_name($item['name'], $ruleset) ?? throw $e;
+                }
+            }
+            $move = [(int)$copy['id'], (int)$item['id'], $id];
+            q('UPDATE inventory SET item_id = ? WHERE item_id = ? AND character_id IN (SELECT id FROM characters WHERE campaign_id = ?)', $move);
+            q('UPDATE store_stock SET item_id = ? WHERE item_id = ? AND store_id IN (SELECT id FROM stores WHERE campaign_id = ?)', $move);
+            q('UPDATE cart_items SET item_id = ? WHERE item_id = ? AND cart_id IN (SELECT c.id FROM carts c JOIN stores s ON s.id = c.store_id WHERE s.campaign_id = ?)', $move);
+            q('UPDATE inventory_log SET item_id = ? WHERE item_id = ? AND campaign_id = ?', $move);
+        }
+    }
+    q('UPDATE campaigns SET ruleset = ?, ruleset_open = 0 WHERE id = ?', [$ruleset, $campaign['id']]);
+    return $copied;
 }
 
 /** The DM picks which campaign the other DM screens show. */
@@ -294,27 +366,27 @@ function inventory_log_page(?int $characterId, int $beforeId = 0): array
     return [array_slice($rows, 0, HISTORY_PAGE_SIZE), count($rows) > HISTORY_PAGE_SIZE];
 }
 
-function item_by_name(string $name): ?array
+/** The item with this name in this system. Names only have to be unique within one. */
+function item_by_name(string $name, string $ruleset): ?array
 {
-    return q_one('SELECT * FROM items WHERE LOWER(name) = LOWER(?)', [$name]);
+    return q_one('SELECT * FROM items WHERE LOWER(name) = LOWER(?) AND ruleset = ?', [$name, $ruleset]);
 }
 
-/** Find a catalog item by name, or create it with the given details. */
-function find_or_create_item(string $name, int $categoryId, float $weight, int $priceCp, string $description = ''): array
+/** Find the current campaign's item by name, or create it in that campaign's system with the given details. */
+function find_or_create_item(string $name, int $categoryId, float $weight, int $priceCp): array
 {
-    $item = item_by_name($name);
-    return $item ?? create_item($name, $categoryId, $weight, $priceCp, $description);
+    return item_by_name($name, campaign_ruleset()) ?? create_item($name, $categoryId, $weight, $priceCp);
 }
 
-/** Add an item to the catalog. Throws PDOException if the name is taken. */
-function create_item(string $name, int $categoryId, float $weight, int $priceCp, string $description = ''): array
+/** Add an item to the catalog, by default in the current campaign's system. Throws PDOException if the name is taken there. */
+function create_item(string $name, int $categoryId, float $weight, int $priceCp, string $description = '', ?string $ruleset = null): array
 {
     if (!category_by_id($categoryId)) {
         $categoryId = (int)categories()[0]['id'];
     }
     $id = insert(
-        'INSERT INTO items (name, category_id, weight, price_cp, description) VALUES (?, ?, ?, ?, ?)',
-        [$name, $categoryId, max(0, $weight), max(0, $priceCp), $description === '' ? null : $description]
+        'INSERT INTO items (ruleset, name, category_id, weight, price_cp, description) VALUES (?, ?, ?, ?, ?, ?)',
+        [$ruleset ?? campaign_ruleset(), $name, $categoryId, max(0, $weight), max(0, $priceCp), $description === '' ? null : $description]
     );
     return q_one('SELECT * FROM items WHERE id = ?', [$id]);
 }
@@ -357,7 +429,10 @@ function having_tags(array $rows, array $tags): array
 /** Every tag in use anywhere in the catalog. */
 function all_tags(): array
 {
-    return array_column(q_all('SELECT DISTINCT tag FROM item_tags ORDER BY tag'), 'tag');
+    return array_column(q_all(
+        'SELECT DISTINCT t.tag FROM item_tags t JOIN items i ON i.id = t.item_id WHERE i.ruleset = ? ORDER BY t.tag',
+        [campaign_ruleset()]
+    ), 'tag');
 }
 
 function stores_summary(): array

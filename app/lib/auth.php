@@ -88,11 +88,19 @@ function require_login(): array
     return $user;
 }
 
-function require_dm(): array
+/**
+ * A DM's pages show their current campaign, so a DM with none yet is sent to Campaigns to start one and pick its
+ * system. The pages that work without one pass $needsCampaign false.
+ */
+function require_dm(bool $needsCampaign = true): array
 {
     $user = require_login();
     if ($user['role'] !== 'dm') {
         abort(403, 'Only the DM can do that.');
+    }
+    if ($needsCampaign && !current_campaign()) {
+        flash('Start a campaign first: give it a name and pick the system it plays.');
+        redirect('/dm/campaigns');
     }
     return $user;
 }

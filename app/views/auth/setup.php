@@ -15,6 +15,9 @@
     <label class="field">Campaign name
       <input name="campaign" required maxlength="100" placeholder="e.g. Curse of the Sunken Crown" value="<?= e($old['campaign'] ?? '') ?>">
     </label>
+    <label class="field">System <span class="small">(can’t be changed later)</span>
+      <select name="ruleset"><?php foreach (CAMPAIGN_RULESETS as $value => $label): ?><option value="<?= e($value) ?>"<?= ($old['ruleset'] ?? '') === $value ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
+    </label>
     <button class="btn btn-primary btn-big" type="submit">Create DM account</button>
   </form>
 </main>

@@ -200,7 +200,7 @@ function admin_log(): void
  */
 function admin_account_form(): void
 {
-    require_dm();
+    require_dm(needsCampaign: false);
     if (admin_exists()) {
         redirect('/dm');
     }
@@ -209,7 +209,7 @@ function admin_account_form(): void
 
 function admin_account_submit(): void
 {
-    $dm = require_dm();
+    $dm = require_dm(needsCampaign: false);
     $username = post_str('username', 50);
     $password = (string)($_POST['password'] ?? '');
     if ($username === '' || strlen($password) < STAFF_PASSWORD_MIN) {

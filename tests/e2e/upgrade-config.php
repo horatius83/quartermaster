@@ -4,7 +4,7 @@
 return [
     'driver' => 'sqlite',
     'sqlite' => [
-        'path' => sys_get_temp_dir() . '/quartermaster-e2e-upgrade.sqlite',
+        'path' => (require __DIR__ . '/db-dir.php') . '/quartermaster-e2e-upgrade.sqlite',
     ],
     'campaign_name' => 'The Old Campaign',
     'base_path' => null,

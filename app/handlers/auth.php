@@ -67,20 +67,22 @@ function setup_submit(): void
     $password = (string)($_POST['password'] ?? '');
     $campaign = post_str('campaign', 100);
     if ($username === '' || strlen($password) < STAFF_PASSWORD_MIN || $campaign === '') {
-        back_with_error('/setup', 'Pick a username, a password of at least ' . STAFF_PASSWORD_MIN . ' characters and a campaign name.', ['username', 'campaign']);
+        back_with_error('/setup', 'Pick a username, a password of at least ' . STAFF_PASSWORD_MIN . ' characters and a campaign name.', ['username', 'campaign', 'ruleset']);
     }
     if (username_taken($username)) {
-        back_with_error('/setup', "The username “{$username}” is already taken.", ['campaign']);
+        back_with_error('/setup', "The username “{$username}” is already taken.", ['campaign', 'ruleset']);
     }
-    [$id, $campaignId] = transaction(function () use ($username, $password, $campaign) {
+    $ruleset = posted_campaign_ruleset();
+    [$id, $campaignId] = transaction(function () use ($username, $password, $campaign, $ruleset) {
         $id = create_login($username, $password, 'dm', 'First DM, at setup');
         // An upgraded database already has campaigns with no DM: the new DM runs them all, and names the first.
         $campaignId = (int)q_val('SELECT id FROM campaigns WHERE owner_user_id IS NULL ORDER BY id LIMIT 1');
         if ($campaignId) {
             q('UPDATE campaigns SET owner_user_id = ? WHERE owner_user_id IS NULL', [$id]);
             q('UPDATE campaigns SET name = ? WHERE id = ?', [$campaign, $campaignId]);
+            settle_campaign_system(q_one('SELECT * FROM campaigns WHERE id = ?', [$campaignId]), $ruleset);
         } else {
-            $campaignId = create_campaign($campaign, $id);
+            $campaignId = create_campaign($campaign, $id, $ruleset);
         }
         return [$id, $campaignId];
     });
