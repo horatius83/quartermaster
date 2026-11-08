@@ -231,7 +231,7 @@ function dm_catalog_delete(int $id): void
     catalog_redraw();
 }
 
-/** <option>s for the item-name <datalist> on the give / stock forms. */
+/** Options for the item-name suggestion list on the give / stock forms (views/partials/item_suggest.php). */
 function dm_catalog_suggest(): void
 {
     require_dm();
@@ -245,7 +245,10 @@ function dm_catalog_suggest(): void
             ['%' . $search . '%', campaign_ruleset()]
         );
     foreach ($rows as $r) {
-        echo '<option value="' . e($r['name']) . '">' . e($r['category'] . ' · ' . coins((int)$r['price_cp']) . ' · ' . fmt_weight($r['weight'])) . '</option>';
+        echo '<li role="option" class="suggest-opt" aria-selected="false" data-value="' . e($r['name']) . '">'
+            . '<span class="suggest-name">' . e($r['name']) . '</span>'
+            . '<span class="suggest-meta">' . e($r['category'] . ' · ' . coins((int)$r['price_cp']) . ' · ' . fmt_weight($r['weight'])) . '</span>'
+            . '</li>';
     }
     exit;
 }
