@@ -53,11 +53,7 @@
 
     <form id="stock-form" class="card card-dashed form-row"
           hx-post="<?= e(url('/dm/stores/' . $store['id'] . '/stock')) ?>" hx-target="#stock-body" hx-swap="outerHTML">
-      <label class="field grow">Stock an item <span class="small">(new names are added to the catalog)</span>
-        <input name="item" list="item-suggest" required maxlength="150" autocomplete="off" placeholder="Search the catalog…"
-               hx-get="<?= e(url('/dm/catalog/suggest')) ?>" hx-trigger="input changed delay:250ms" hx-target="#item-suggest" hx-swap="innerHTML">
-        <datalist id="item-suggest"></datalist>
-      </label>
+      <?= render('partials/item_suggest', ['id' => 'stock-item', 'label' => 'Stock an item', 'hint' => '(new names are added to the catalog)', 'placeholder' => 'Search the catalog…']) ?>
       <label class="field tiny">Price <input name="price" placeholder="catalog"></label>
       <label class="field tiny">In stock <input name="quantity" placeholder="∞"></label>
       <label class="field mid">Category

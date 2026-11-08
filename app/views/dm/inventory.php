@@ -19,11 +19,7 @@
     <form id="give-form" class="form-row"
           hx-post="<?= e(url('/dm/inventory/' . $char['id'] . '/give')) ?>"
           hx-target="#inv-body" hx-swap="outerHTML">
-      <label class="field grow">Item
-        <input name="item" list="item-suggest" required maxlength="150" autocomplete="off" placeholder="e.g. Potion of Healing"
-               hx-get="<?= e(url('/dm/catalog/suggest')) ?>" hx-trigger="input changed delay:250ms" hx-target="#item-suggest" hx-swap="innerHTML">
-        <datalist id="item-suggest"></datalist>
-      </label>
+      <?= render('partials/item_suggest', ['id' => 'give-item', 'label' => 'Item', 'placeholder' => 'e.g. Potion of Healing']) ?>
       <label class="field mid">Category
         <select name="category_id">
           <?php foreach (categories() as $cat): ?><option value="<?= (int)$cat['id'] ?>"><?= e($cat['name']) ?></option><?php endforeach; ?>

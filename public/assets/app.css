@@ -295,7 +295,7 @@ label.chip { position: relative; }
 .item-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .item-tag { padding: 0 8px; font-size: 14px; color: var(--ink-soft); border: 1px solid var(--rule); border-radius: 999px; }
 
-label.field { display: flex; flex-direction: column; gap: 2px; font-size: 15px; color: var(--ink-soft); }
+label.field, div.field { display: flex; flex-direction: column; gap: 2px; font-size: 15px; color: var(--ink-soft); }
 .input, .field input, .field select, .field textarea {
   min-height: 44px; width: 100%;
   font: inherit; font-size: 18px; color: var(--ink);
@@ -309,6 +309,25 @@ label.field { display: flex; flex-direction: column; gap: 2px; font-size: 15px; 
 .form-row > .grow { flex: 3 1 220px; }
 .form-row > .mid { flex: 1 1 150px; }
 .form-row > .tiny { flex: 0 1 100px; }
+
+/* Item-name suggestions (views/partials/item_suggest.php) */
+.suggest { position: relative; }
+.suggest-list {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+  margin: 4px 0 0; padding: 4px 0; list-style: none;
+  max-height: min(50vh, 320px); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--field); border: 1.5px solid var(--ink-soft); border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(46, 33, 24, .18);
+}
+.suggest-list[hidden] { display: none; }
+.suggest-opt {
+  display: flex; flex-direction: column; justify-content: center;
+  min-height: 44px; padding: 4px 12px; cursor: pointer;
+  color: var(--ink); font-size: 18px; line-height: 1.2;
+}
+.suggest-opt + .suggest-opt { border-top: 1px solid var(--parchment); }
+.suggest-opt:hover, .suggest-opt[aria-selected="true"] { background: var(--parchment); }
+.suggest-meta { font-size: 14px; color: var(--ink-soft); }
 
 fieldset.box {
   margin: 0; border: 1.5px solid var(--ink-soft); border-radius: 6px; padding: 6px 12px 10px;
