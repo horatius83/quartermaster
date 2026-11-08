@@ -184,7 +184,7 @@ test('the admin changes their own password', async ({ page }) => {
   await expect(toasts(page)).toContainText('Password changed.');
   await expectSignInFails(page, ADMIN.username, ADMIN.password);
   await signIn(page, ADMIN.username, 'keeper-of-keys');
-  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page).toHaveURL(/\/admin$/);
 });
 
 test('the admin resets a DM’s password, which signs the DM out', async ({ page, openPage }) => {
@@ -192,6 +192,7 @@ test('the admin resets a DM’s password, which signs the DM out', async ({ page
   await signInAsDm(dmPage);
 
   await signInAsAdmin(page);
+  await page.goto('/admin/users');
   await page.getByLabel('New password for dm').fill('fresh-start');
   await page.getByRole('button', { name: 'Reset password' }).click();
   await expect(toasts(page)).toContainText('New password set for dm.');
@@ -209,6 +210,7 @@ test('the admin resets a DM’s password, which signs the DM out', async ({ page
 
 test('only DMs have a reset form, and only the admin can use it', async ({ page }) => {
   await signInAsAdmin(page);
+  await page.goto('/admin/users');
   await expect(page.getByLabel('New password for dm')).toBeVisible();
   await expect(page.getByLabel('New password for bryn')).toHaveCount(0);
   await expect(page.getByLabel('New password for admin')).toHaveCount(0);

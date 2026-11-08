@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, signInAsDm, toasts } from './fixtures';
+import { test, expect, loadSrd, signInAsDm, toasts } from './fixtures';
 
 const rows = (page: Page) => page.locator('#catalog-body tr');
 const rowOf = (page: Page, name: string) =>
@@ -72,8 +72,8 @@ test('deleting a row right after editing that same row still deletes it', async 
 
 test.describe('with the SRD items loaded', () => {
   test.beforeEach(async ({ page }) => {
-    await page.getByRole('button', { name: 'Load 5e SRD items' }).click();
-    await expect(toasts(page)).toContainText('5e SRD items');
+    await loadSrd(page, '5e');
+    await page.goto('/dm/catalog');
     await expect(pager(page)).toContainText('page 1 of');
   });
 

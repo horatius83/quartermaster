@@ -2,9 +2,9 @@
 
 A small web app for running a tabletop RPG's economy. The DM keeps every player's pack and purse, opens shops with their own stock, and approves what players put in their carts.
 
-- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system and load the SRD's gear into it, approve or decline carts, and review the history of every pack and purse.
+- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system, approve or decline carts, and review the history of every pack and purse.
 - **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack and its history.
-- **Admin:** add and delete DMs and other logins, and read the account log of every login added or deleted.
+- **Admin:** load each system's SRD gear into its catalog from the dashboard, add and delete DMs and other logins, and read the account log of every login added or deleted.
 
 Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals). htmx and the fonts are served from `public/assets`, so pages load nothing from other sites. Their licences are alongside them, and they need to stay deployed with them.
 
@@ -33,7 +33,7 @@ Each campaign plays one system, 5e, 3.5e, Pathfinder 1e or Pathfinder 2e. It's c
 
 Each catalog item belongs to one system, and its name only has to be unique within that system (the unique key is system + name), so the 5e and 3.5e Longswords are separate items with their own weight, price and description. A campaign only sees its own system's items and tags, in the catalog and in the give and stock forms, and a name typed there that's new is added to that system. Campaigns of the same system share its items, including other DMs' campaigns. The catalog shows 50 items a page, so a newly added item may land on another page: search for it to find it.
 
-*Load 5e SRD items* on the catalog page adds that system's weapons, armor, ammunition, gear and tools from `app/data/srd-5e.php` or `app/data/srd-3.5e.php`. It skips any name that system already has, so a DM's own prices and descriptions are never overwritten. It can be run again, which also brings back SRD items someone deleted. Magic items and mounts aren't included. Because weapons have no damage columns, damage goes in the description and properties in the tags. Pathfinder has no items to load, so DMs add their own.
+The admin's *Dashboard* has a *Load 5e SRD items* and a *Load 3.5e SRD items* button, which add that system's weapons, armor, ammunition, gear and tools from `app/data/srd-5e.php` or `app/data/srd-3.5e.php`. Each skips any name that system already has, so a DM's own prices and descriptions are never overwritten. Each system's card says whether its SRD is loaded, partly loaded (and how many items loading would add) or not loaded, counted from the names in its catalog. Once every SRD name is there, its button is disabled; if someone deletes or renames an SRD item, the button comes back and loading restores it. Until a system's catalog has none of its SRD items, its DMs' catalog page points them to the admin. Magic items and mounts aren't included. Because weapons have no damage columns, damage goes in the description and properties in the tags. Pathfinder has no items to load, so DMs add their own.
 
 The 5e data comes from SRD 5.1 (CC BY 4.0) by way of the [5e-bits database](https://github.com/5e-bits/5e-database), and the 3.5e data from the System Reference Document (Open Game License 1.0a). Both require notices, which are in `public/assets/srd-notices.txt` and linked from the DM sidebar and the foot of every player page. Keep that file deployed with the data.
 
@@ -70,7 +70,7 @@ Older databases are brought up to date automatically on the first request after 
 - **004, sign-in:** lets a new password sign that login out everywhere else, and adds the table that limits wrong passwords. Everyone has to sign in again once after this upgrade.
 - **005, item tags:** adds the table for the tags DMs put on catalog items. Safe to run again.
 - **006, rulesets:** gives items and campaigns a system and makes item names unique per system. Everything existing starts as 5e.
-- **007, system choice:** lets each existing campaign set its real system once, under *Campaigns*, which copies the items that campaign uses (in its packs, on its shelves, in its carts and its history) into that system and moves the campaign to the copies. Catalog items it doesn't use stay 5e only, so re-add any you want. The 5e originals stay for campaigns that really are 5e; if none are, delete the leftovers from a 5e campaign's catalog should you ever start one. Do this before loading SRD items, which the catalog page won't allow until the campaign's system is set. A name the chosen system already has means that item, so a pack holding it takes on that item's weight and description.
+- **007, system choice:** lets each existing campaign set its real system once, under *Campaigns*, which copies the items that campaign uses (in its packs, on its shelves, in its carts and its history) into that system and moves the campaign to the copies. Catalog items it doesn't use stay 5e only, so re-add any you want. The 5e originals stay for campaigns that really are 5e; if none are, delete the leftovers from a 5e campaign's catalog should you ever start one. A name the chosen system already has means that item, so a pack holding it takes on that item's weight and description.
 
 If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006 and 007 only once each: unlike 001 and 005, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
@@ -139,8 +139,7 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | Interaction | Request | Swaps |
 | --- | --- | --- |
 | Pack quantity − / + | `POST /dm/inv/{id}/qty` | that table row, plus the carried-weight line (out-of-band) |
-| Load SRD items | `POST /dm/catalog/import-srd` | the table body and pager; the tag filter fetches itself again |
-| Catalog pages | `GET /dm/catalog?page=…` | the table body and, out-of-band, the pager; the URL is pushed to history. Changing a filter goes back to page 1; saves, deletes and imports stay on the page |
+| Catalog pages | `GET /dm/catalog?page=…` | the table body and, out-of-band, the pager; the URL is pushed to history. Changing a filter goes back to page 1; saves and deletes stay on the page |
 | Category filter chips | `GET /dm/inventory/{id}?cat=…` | the table body; the URL is pushed to history |
 | Tag filter chips | `GET /shop/{id}?tag[]=…`, `GET /dm/catalog?tag[]=…` | the wares or the table body, showing items with every chosen tag; the URL is pushed to history |
 | Give item / stock item | `POST …/give`, `…/stock` | the table body; the form resets |

@@ -43,7 +43,7 @@ test('setup taking over an upgraded campaign converts its items to the chosen sy
   await page.goto('/dm/catalog');
   await expect(page.locator('#catalog-body').locator('input[name="name"][value="Old sword"]')).toHaveCount(1);
   await expect(page.locator('#catalog-body tr td').nth(-2)).toHaveText('1');
-  await expect(page.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeVisible();
+  await expect(page.locator('main')).toContainText('The 3.5e SRD weapons, armor and gear aren’t in this catalog yet.');
 
   await page.goto('/dm/campaigns');
   await expect(page.getByRole('button', { name: 'Set once' })).toHaveCount(0);

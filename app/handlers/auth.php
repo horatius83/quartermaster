@@ -16,7 +16,7 @@ function home(): void
         redirect('/setup');
     }
     $user = require_login();
-    redirect(match ($user['role']) { 'admin' => '/admin/users', 'dm' => '/dm', default => '/shop' });
+    redirect(match ($user['role']) { 'admin' => '/admin', 'dm' => '/dm', default => '/shop' });
 }
 
 function login_form(): void
