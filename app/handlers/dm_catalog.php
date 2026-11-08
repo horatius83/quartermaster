@@ -293,21 +293,44 @@ function dm_catalog_import_srd(): void
     catalog_redraw();
 }
 
-/** Options for the item-name suggestion list on the give / stock forms (views/partials/item_suggest.php). */
+/** Most items one browse lists. A category bigger than this says so, and typing narrows it. */
+const SUGGEST_BROWSE_MAX = 300;
+
+/**
+ * Options for the item-name suggestion list on the give / stock forms (views/partials/item_suggest.php).
+ * ?item=… searches every category for a name containing the text (the first 12, A–Z).
+ * ?browse=1&category_id=… lists that whole category A–Z instead, for the ▾ button.
+ */
 function dm_catalog_suggest(): void
 {
     require_dm();
-    $search = get_str('item', 150);
-    $rows = $search === ''
-        ? []
-        : q_all(
-            'SELECT i.name, i.weight, i.price_cp, cat.name AS category FROM items i
-               JOIN categories cat ON cat.id = i.category_id
-              WHERE i.name LIKE ? AND i.ruleset = ? ORDER BY i.name LIMIT 12',
-            ['%' . $search . '%', campaign_ruleset()]
+    $select = 'SELECT i.name, i.weight, i.price_cp, i.category_id, cat.name AS category FROM items i
+                 JOIN categories cat ON cat.id = i.category_id';
+    if (get_str('browse', 1) === '1') {
+        $category = category_by_id((int)get_str('category_id', 11));
+        if (!$category) {
+            exit;
+        }
+        $rows = q_all(
+            $select . ' WHERE i.category_id = ? AND i.ruleset = ? ORDER BY i.name LIMIT ' . (SUGGEST_BROWSE_MAX + 1),
+            [(int)$category['id'], campaign_ruleset()]
         );
+        $more = count($rows) > SUGGEST_BROWSE_MAX;
+        $rows = array_slice($rows, 0, SUGGEST_BROWSE_MAX);
+        $head = $rows
+            ? $category['name'] . ', A–Z' . ($more ? ' (the first ' . SUGGEST_BROWSE_MAX . ')' : '')
+            : 'No ' . $category['name'] . ' items in the catalog yet.';
+        echo '<li class="suggest-head" role="presentation">' . e($head)
+            . ' <span class="suggest-hint">Change Category to browse another.</span></li>';
+    } else {
+        $search = get_str('item', 150);
+        $rows = $search === ''
+            ? []
+            : q_all($select . ' WHERE i.name LIKE ? AND i.ruleset = ? ORDER BY i.name LIMIT 12', ['%' . $search . '%', campaign_ruleset()]);
+    }
     foreach ($rows as $r) {
-        echo '<li role="option" class="suggest-opt" aria-selected="false" data-value="' . e($r['name']) . '">'
+        echo '<li role="option" class="suggest-opt" aria-selected="false" data-value="' . e($r['name']) . '"'
+            . ' data-category-id="' . (int)$r['category_id'] . '">'
             . '<span class="suggest-name">' . e($r['name']) . '</span>'
             . '<span class="suggest-meta">' . e($r['category'] . ' · ' . coins((int)$r['price_cp']) . ' · ' . fmt_weight($r['weight'])) . '</span>'
             . '</li>';

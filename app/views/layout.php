@@ -12,9 +12,9 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($title) ?> · Quartermaster</title>
-<link rel="stylesheet" href="<?= e(url('/assets/app.css')) ?>">
-<script src="<?= e(url('/assets/htmx-2.0.4.min.js')) ?>"></script>
-<script src="<?= e(url('/assets/app.js')) ?>" defer></script>
+<link rel="stylesheet" href="<?= e(asset('app.css')) ?>">
+<script src="<?= e(asset('htmx-2.0.4.min.js')) ?>"></script>
+<script src="<?= e(asset('app.js')) ?>" defer></script>
 </head>
 <body hx-boost="true" hx-headers='{"X-CSRF-Token": "<?= e(csrf_token()) ?>"}'>
 <?php if ($user && $user['role'] === 'dm'): ?>

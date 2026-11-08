@@ -34,6 +34,16 @@ function url(string $path = '/'): string
     return base_path() . $path;
 }
 
+/**
+ * URL of a file in public/assets, tagged with when it last changed. Browsers and hosts cache assets, so without
+ * the tag a deploy can leave pages running new markup against an old app.js.
+ */
+function asset(string $file): string
+{
+    $mtime = @filemtime(PUBLIC_DIR . '/assets/' . $file);
+    return url('/assets/' . $file) . ($mtime ? '?v=' . $mtime : '');
+}
+
 function is_htmx(): bool
 {
     return isset($_SERVER['HTTP_HX_REQUEST']);

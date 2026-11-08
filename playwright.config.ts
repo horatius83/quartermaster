@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import { phpCommand, phpEnv, ROOT } from './tests/e2e/php';
 
-const PORT = 8099;
+// QM_TEST_PORT moves the test server, so two checkouts (say, git worktrees) can run their suites at once. Otherwise
+// one would reuse the other's server, and test against that checkout's code and database.
+const PORT = Number(process.env.QM_TEST_PORT) || 8099;
 
 export default defineConfig({
   testDir: './tests/e2e',

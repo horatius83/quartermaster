@@ -54,12 +54,14 @@ test('clearing the field drops the old suggestions', async ({ page }) => {
   await page.goto(`/dm/inventory/${BRYN}`);
   const input = itemInput(page);
   await input.pressSequentially('torc');
-  await expect(suggestions(page).getByRole('option')).not.toHaveCount(0);
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toBeVisible();
   await input.fill('');
   await expect(suggestions(page)).toBeHidden();
-  await input.press('ArrowDown');
-  await expect(suggestions(page)).toBeHidden();
   await expect(suggestions(page).getByRole('option')).toHaveCount(0);
+  // Down then browses the chosen category rather than bringing the old search back.
+  await input.press('ArrowDown');
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toHaveCount(0);
 });
 
 test('a reply that arrives after a pick doesn’t reopen the list', async ({ page }) => {
@@ -100,4 +102,62 @@ test('DM stocks a shelf by picking a suggestion', async ({ page }) => {
   await expect(form.getByRole('listbox')).toBeHidden();
   await form.getByRole('button', { name: 'Add to shelf' }).click();
   await expect(page.locator('#stock-body tr', { hasText: 'Torch' })).toHaveCount(1);
+});
+
+test('the ▾ button lists the chosen category A–Z, and Category switches it', async ({ openPage, browserName }) => {
+  test.skip(browserName === 'firefox', 'Firefox has no mobile emulation');
+  const page = await openPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await signInAsDm(page);
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  const list = suggestions(page);
+  const category = form.locator('select[name="category_id"]');
+  await expect(category).toHaveValue(await category.locator('option', { hasText: 'Weapon' }).getAttribute('value') ?? '');
+
+  await form.getByRole('button', { name: 'Browse the catalog by category' }).tap();
+  await expect(list).toBeVisible();
+  await expect(list).toContainText('Weapon, A–Z');
+  const names = await list.getByRole('option').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.value ?? ''));
+  expect(names.length).toBeGreaterThan(1);
+  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  await expect(list.getByRole('option', { name: /Longsword/ })).toBeVisible();
+  // Browsing from a tap doesn't put the cursor in the field, so a phone keeps its keyboard down.
+  await expect(itemInput(page)).not.toBeFocused();
+
+  await category.selectOption({ label: 'Armor' });
+  await expect(list).toContainText('Armor, A–Z');
+  await expect(list.getByRole('option', { name: /Longsword/ })).toHaveCount(0);
+  await list.getByRole('option', { name: /Shield/ }).tap();
+  await expect(itemInput(page)).toHaveValue('Shield');
+  await expect(list).toBeHidden();
+});
+
+test('picking a browsed item sets its category, and ▾ closes the list again', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  const toggle = form.getByRole('button', { name: 'Browse the catalog by category' });
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Adventuring Gear' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await toggle.click();
+  await expect(suggestions(page)).toBeHidden();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+  // Down on the empty field browses too.
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Weapon' });
+  await itemInput(page).focus();
+  await itemInput(page).press('ArrowDown');
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+
+  // Typing searches every category again.
+  await itemInput(page).pressSequentially('torc');
+  await expect(suggestions(page)).not.toContainText('A–Z');
+  await suggestions(page).getByRole('option', { name: /Torch/ }).click();
+  await expect(form.locator('select[name="category_id"]').locator('option:checked')).toHaveText('Adventuring Gear');
+});
+
+test('assets carry a version, so a deploy isn’t hidden by a cached app.js', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  await expect(page.locator('script[src*="app.js"]')).toHaveAttribute('src', /app\.js\?v=\d+$/);
+  await expect(page.locator('link[rel="stylesheet"][href*="app.css"]')).toHaveAttribute('href', /app\.css\?v=\d+$/);
 });

@@ -312,6 +312,17 @@ label.field, div.field { display: flex; flex-direction: column; gap: 2px; font-s
 
 /* Item-name suggestions (views/partials/item_suggest.php) */
 .suggest { position: relative; }
+.suggest-control { display: flex; }
+.suggest-control input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.suggest-toggle {
+  flex: 0 0 44px; min-height: 44px; margin-left: -1.5px;
+  font: inherit; font-size: 20px; line-height: 1; color: var(--ink); cursor: pointer;
+  background: var(--paper); border: 1.5px solid var(--ink-soft); border-radius: 0 6px 6px 0;
+}
+.suggest-toggle:hover, .suggest-toggle[aria-expanded="true"] { background: var(--parchment); }
+.suggest-toggle:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+.suggest-head { padding: 6px 12px; font-size: 15px; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
+.suggest-hint { display: block; font-size: 13px; }
 .suggest-list {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
   margin: 4px 0 0; padding: 4px 0; list-style: none;

@@ -111,7 +111,7 @@ npm test
 
 `npm run test:chromium` runs just Chromium. `npm run test:docker` runs both browsers inside Microsoft's Playwright Linux image with PHP added (`tests/e2e/Dockerfile`), so you only need Docker and `npm install`: no PHP or browsers on the host. Use it where a browser won't run locally: Playwright's Firefox build fails to start on some Windows 11 machines with a "side-by-side configuration" error. Arguments after `--` go to Playwright, e.g. `npm run test:docker -- --project=firefox`. The first run downloads the image (about 2 GB).
 
-The tests start PHP's built-in server on port 8099 with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite file in `/dev/shm` (memory-backed storage, so writes don't wait on the disk), or in the system temp folder where there's no `/dev/shm`. Every test starts from a fresh demo seed, so your `app/config.php` and database are never touched.
+The tests start PHP's built-in server on port 8099 (`QM_TEST_PORT` picks another) with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite file in `/dev/shm` (memory-backed storage, so writes don't wait on the disk), or in the system temp folder where there's no `/dev/shm`. Each checkout gets its own file there, so with `QM_TEST_PORT` set, two git worktrees can run their suites side by side. Every test starts from a fresh demo seed, so your `app/config.php` and database are never touched.
 
 Those tests all use SQLite. `npm run test:mysql` checks the item tags and rulesets upgrades, the tags table and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
 

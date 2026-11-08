@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 // Front controller. Every request that isn't a real file comes through here (see .htaccess).
 // The app/ folder sits next to this public folder, outside the web root.
+define('PUBLIC_DIR', __DIR__);
 $appDir = is_dir(__DIR__ . '/../app') ? __DIR__ . '/../app' : __DIR__ . '/app';
 require $appDir . '/bootstrap.php';
 

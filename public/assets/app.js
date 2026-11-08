@@ -75,128 +75,198 @@
     }
   });
 
-  // Item-name suggestions (views/partials/item_suggest.php). htmx fills the list; this opens, closes and picks.
-  function suggestInput(list) {
-    return document.querySelector('[aria-controls="' + list.id + '"]');
+  // Item-name suggestions (views/partials/item_suggest.php). Typing searches the catalog through htmx; the ▾ button
+  // lists the category chosen in the form's Category field. This opens, closes and picks.
+  // The list's state lives on it: data-mode is "search" or "browse", data-picked the name just picked, and data-gen
+  // counts the user's moves so a browse reply that arrives after one of them is dropped.
+  function suggestParts(el) {
+    var box = el && el.closest && el.closest('.suggest');
+    if (!box) return null;
+    var input = box.querySelector('[role="combobox"]');
+    var list = box.querySelector('.suggest-list');
+    return input && list ? { box: box, input: input, list: list, toggle: box.querySelector('.suggest-toggle') } : null;
   }
-  function suggestOptions(list) {
-    return list.querySelectorAll('[role="option"]');
+  function suggestOptions(p) {
+    return p.list.querySelectorAll('[role="option"]');
   }
-  function setSuggestActive(input, list, index) {
-    var opts = suggestOptions(list);
+  function suggestCategory(p) {
+    var form = p.box.closest('form');
+    return form && form.querySelector('select[name="category_id"]');
+  }
+  function setSuggestActive(p, index) {
+    var opts = suggestOptions(p);
     Array.prototype.forEach.call(opts, function (o, i) { o.setAttribute('aria-selected', i === index ? 'true' : 'false'); });
-    list.dataset.active = String(index);
-    if (opts[index]) {
-      input.setAttribute('aria-activedescendant', opts[index].id);
+    p.list.dataset.active = String(index);
+    var opt = opts[index];
+    if (opt) {
+      p.input.setAttribute('aria-activedescendant', opt.id);
       // Scroll the list only. scrollIntoView would also scroll the page and could push the input off screen.
-      var opt = opts[index];
-      if (opt.offsetTop < list.scrollTop) list.scrollTop = opt.offsetTop;
-      else if (opt.offsetTop + opt.offsetHeight > list.scrollTop + list.clientHeight) {
-        list.scrollTop = opt.offsetTop + opt.offsetHeight - list.clientHeight;
+      if (opt.offsetTop < p.list.scrollTop) p.list.scrollTop = opt.offsetTop;
+      else if (opt.offsetTop + opt.offsetHeight > p.list.scrollTop + p.list.clientHeight) {
+        p.list.scrollTop = opt.offsetTop + opt.offsetHeight - p.list.clientHeight;
       }
     } else {
-      input.removeAttribute('aria-activedescendant');
+      p.input.removeAttribute('aria-activedescendant');
     }
   }
-  function setSuggestOpen(input, list, open) {
-    list.hidden = !open;
-    input.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (!open) setSuggestActive(input, list, -1);
+  function setSuggestOpen(p, open) {
+    p.list.hidden = !open;
+    p.input.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (p.toggle) p.toggle.setAttribute('aria-expanded', open && p.list.dataset.mode === 'browse' ? 'true' : 'false');
+    if (!open) setSuggestActive(p, -1);
   }
-  function pickSuggestion(input, list, opt) {
-    input.value = opt.dataset.value;
+  function numberSuggestions(p) {
+    p.list.scrollTop = 0;
+    Array.prototype.forEach.call(suggestOptions(p), function (o, i) { o.id = p.list.id + '-' + i; });
+  }
+  function suggestMoved(p) {
+    p.list.dataset.gen = String((parseInt(p.list.dataset.gen || '0', 10) || 0) + 1);
+  }
+  function closeSuggestions(p) {
+    suggestMoved(p);
+    setSuggestOpen(p, false);
+  }
+  function pickSuggestion(p, opt) {
+    p.input.value = opt.dataset.value;
     // Replies still on their way (or a delayed request yet to fire) mustn't reopen the list over the pick.
-    list.dataset.picked = input.value;
-    setSuggestOpen(input, list, false);
+    p.list.dataset.picked = p.input.value;
+    // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
+    var category = suggestCategory(p);
+    var id = opt.dataset.categoryId;
+    if (category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
+    p.list.dataset.mode = '';
+    closeSuggestions(p);
   }
-  function suggestListFor(input) {
-    var id = input.getAttribute('role') === 'combobox' && input.getAttribute('aria-controls');
-    var list = id && document.getElementById(id);
-    return list && list.classList.contains('suggest-list') ? list : null;
+  function browseSuggestions(p) {
+    var category = suggestCategory(p);
+    suggestMoved(p);
+    var gen = p.list.dataset.gen;
+    p.list.dataset.mode = 'browse';
+    var url = p.toggle.dataset.url + '?browse=1&category_id=' + encodeURIComponent(category ? category.value : '');
+    fetch(url, { credentials: 'same-origin', headers: { 'HX-Request': 'true' } })
+      .then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.text();
+      })
+      .then(function (html) {
+        if (p.list.dataset.gen !== gen || !document.body.contains(p.list)) return;
+        p.list.innerHTML = html;
+        numberSuggestions(p);
+        setSuggestOpen(p, true);
+      })
+      .catch(function () {
+        showToast('Could not load the catalog. Try again.', 'error');
+      });
   }
 
-  // Note what each suggestion request searched for, so a reply that no longer matches the input can be dropped.
+  // Note what each search asked for, so a reply that no longer matches the input can be dropped.
   document.addEventListener('htmx:beforeRequest', function (evt) {
-    if (suggestListFor(evt.detail.elt)) evt.detail.xhr.qmSearched = evt.detail.elt.value;
+    var p = suggestParts(evt.detail.elt);
+    if (p && evt.detail.elt === p.input) evt.detail.xhr.qmSearched = p.input.value;
   });
   document.addEventListener('htmx:beforeSwap', function (evt) {
-    var list = evt.detail.target;
-    if (!list.classList || !list.classList.contains('suggest-list')) return;
-    var input = suggestInput(list);
-    if (!input) return;
-    // hx-sync only aborts a request once the next one is sent, 250 ms after typing stops. A reply landing in
-    // that gap is for older text.
-    if (evt.detail.xhr.qmSearched !== input.value || input.value === list.dataset.picked) {
+    var p = suggestParts(evt.detail.target);
+    if (!p || evt.detail.target !== p.list) return;
+    // hx-sync only aborts a request once the next one is sent, 250 ms after typing stops, so a reply can land for
+    // older text. Nor should a search reply reopen the list over a pick, or replace a list being browsed.
+    if (evt.detail.xhr.qmSearched !== p.input.value || p.input.value === p.list.dataset.picked
+        || p.list.dataset.mode === 'browse') {
       evt.detail.shouldSwap = false;
     }
   });
-
   document.addEventListener('htmx:afterSwap', function (evt) {
-    var list = evt.detail.target;
-    if (!list.classList || !list.classList.contains('suggest-list')) return;
-    var input = suggestInput(list);
-    if (!input) return;
-    var opts = suggestOptions(list);
-    Array.prototype.forEach.call(opts, function (o, i) { o.id = list.id + '-' + i; });
+    var p = suggestParts(evt.detail.target);
+    if (!p || evt.detail.target !== p.list) return;
+    numberSuggestions(p);
     // Don't pop open if the user has already moved on (e.g. tapped another field before the reply came).
-    setSuggestOpen(input, list, opts.length > 0 && input.value !== '' && document.activeElement === input);
+    setSuggestOpen(p, suggestOptions(p).length > 0 && p.input.value !== '' && document.activeElement === p.input);
   });
 
   document.addEventListener('input', function (evt) {
-    var list = suggestListFor(evt.target);
-    if (!list) return;
-    delete list.dataset.picked;
-    if (evt.target.value === '') {
-      list.innerHTML = '';
-      setSuggestOpen(evt.target, list, false);
+    var p = suggestParts(evt.target);
+    if (!p || evt.target !== p.input) return;
+    // Typing always searches the whole catalog, even with a category being browsed.
+    suggestMoved(p);
+    p.list.dataset.mode = 'search';
+    delete p.list.dataset.picked;
+    if (p.input.value === '') {
+      p.list.innerHTML = '';
+      setSuggestOpen(p, false);
     }
   });
 
   document.addEventListener('keydown', function (evt) {
-    var input = evt.target;
-    var list = suggestListFor(input);
-    if (!list) return;
-    var count = suggestOptions(list).length;
-    var active = parseInt(list.dataset.active || '-1', 10);
+    var p = suggestParts(evt.target);
+    if (!p || evt.target !== p.input) return;
+    var count = suggestOptions(p).length;
+    var active = parseInt(p.list.dataset.active || '-1', 10);
     if (evt.key === 'ArrowDown' || evt.key === 'ArrowUp') {
-      if (!count) return;
+      if (!count) {
+        // Nothing to move through yet: down on an empty field browses, like the ▾ button.
+        if (evt.key === 'ArrowDown' && p.input.value === '' && p.toggle) {
+          evt.preventDefault();
+          browseSuggestions(p);
+        }
+        return;
+      }
       evt.preventDefault();
-      if (list.hidden) { setSuggestOpen(input, list, true); }
+      if (p.list.hidden) setSuggestOpen(p, true);
       // Cycle through the options and back to the typed text (-1).
       var next = active + (evt.key === 'ArrowDown' ? 1 : -1);
       if (next >= count) next = -1;
       if (next < -1) next = count - 1;
-      setSuggestActive(input, list, next);
-    } else if (evt.key === 'Enter' && !list.hidden && active >= 0) {
+      setSuggestActive(p, next);
+    } else if (evt.key === 'Enter' && !p.list.hidden && active >= 0) {
       evt.preventDefault();
-      pickSuggestion(input, list, suggestOptions(list)[active]);
-    } else if (evt.key === 'Escape' && !list.hidden) {
+      pickSuggestion(p, suggestOptions(p)[active]);
+    } else if (evt.key === 'Escape' && !p.list.hidden) {
       evt.preventDefault();
-      setSuggestOpen(input, list, false);
+      closeSuggestions(p);
     }
   });
 
-  // Keep focus in the input while tapping or clicking an option. Otherwise the input's blur closes the list
-  // before the click lands, and the tap does nothing (this happens on touch screens especially).
+  // Keep focus where it is while tapping or clicking the list or the ▾ button. If the input has focus it keeps it
+  // (and a phone keeps its keyboard); if it hasn't, browsing doesn't pop the keyboard up.
   document.addEventListener('mousedown', function (evt) {
-    if (evt.target.closest && evt.target.closest('.suggest-list')) evt.preventDefault();
+    if (evt.target.closest && evt.target.closest('.suggest-list, .suggest-toggle')) evt.preventDefault();
   });
   document.addEventListener('click', function (evt) {
-    var opt = evt.target.closest && evt.target.closest('.suggest-list [role="option"]');
-    if (!opt) return;
-    var list = opt.closest('.suggest-list');
-    var input = suggestInput(list);
-    if (input) { pickSuggestion(input, list, opt); input.focus(); }
+    if (!evt.target.closest) return;
+    var toggle = evt.target.closest('.suggest-toggle');
+    var p = suggestParts(toggle);
+    if (p) {
+      if (!p.list.hidden && p.list.dataset.mode === 'browse') closeSuggestions(p);
+      else browseSuggestions(p);
+      return;
+    }
+    var opt = evt.target.closest('.suggest-list [role="option"]');
+    p = suggestParts(opt);
+    if (p) pickSuggestion(p, opt);
+  });
+  // Close when the user moves on: a tap or click elsewhere, or tabbing out of the field and its button.
+  document.addEventListener('pointerdown', function (evt) {
+    Array.prototype.forEach.call(document.querySelectorAll('.suggest'), function (box) {
+      var p = suggestParts(box);
+      if (p && !p.list.hidden && !box.contains(evt.target)) closeSuggestions(p);
+    });
   });
   document.addEventListener('focusout', function (evt) {
-    var list = suggestListFor(evt.target);
-    if (list && !(evt.relatedTarget && list.contains(evt.relatedTarget))) setSuggestOpen(evt.target, list, false);
+    var p = suggestParts(evt.target);
+    if (p && !p.list.hidden && evt.relatedTarget && !p.box.contains(evt.relatedTarget)) closeSuggestions(p);
+  });
+  // Changing Category while browsing (the list closes when the select is tapped) shows the new category.
+  document.addEventListener('change', function (evt) {
+    if (!evt.target.matches || !evt.target.matches('select[name="category_id"]') || !evt.target.form) return;
+    var p = suggestParts(evt.target.form.querySelector('.suggest'));
+    if (p && p.toggle && p.list.dataset.mode === 'browse') browseSuggestions(p);
   });
   document.addEventListener('reset', function (evt) {
-    Array.prototype.forEach.call(evt.target.querySelectorAll('.suggest-list'), function (list) {
-      var input = suggestInput(list);
-      list.innerHTML = '';
-      if (input) setSuggestOpen(input, list, false);
+    Array.prototype.forEach.call(evt.target.querySelectorAll('.suggest'), function (box) {
+      var p = suggestParts(box);
+      if (!p) return;
+      p.list.innerHTML = '';
+      p.list.dataset.mode = '';
+      closeSuggestions(p);
     });
   });
 
