@@ -336,6 +336,7 @@ test.describe('a DM with campaigns in two systems', () => {
     await page.goto('/pack');
     const link = page.getByRole('link', { name: 'SRD licences' });
     await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('download', 'srd-notices.txt');
     const notices = await (await page.request.get((await link.getAttribute('href'))!)).text();
     expect(notices).toContain('OPEN GAME LICENSE Version 1.0a');
     expect(notices).toContain('Commons Attribution 4.0 International License');
