@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, signIn, signInAsDm, toasts } from './fixtures';
+import { test, expect, loadSrd, signIn, signInAsAdmin, signInAsDm, toasts } from './fixtures';
 import { checkSrdData, openCampaignSystem, upgradeToRulesets } from './php';
 
 const rows = (page: Page) => page.locator('#catalog-body tr');
@@ -29,10 +29,6 @@ async function addItem(page: Page, name: string): Promise<void> {
   await form.getByLabel('New item').fill(name);
   await form.getByRole('button', { name: 'Add item' }).click();
   await expect(toasts(page)).toContainText(`Added ${name} to the catalog.`);
-}
-
-async function loadSrd(page: Page, system: string): Promise<void> {
-  await page.getByRole('button', { name: `Load ${system} SRD items` }).click();
 }
 
 test('the bundled SRD data is all usable', () => {
@@ -110,8 +106,6 @@ test.describe('a DM with campaigns in two systems', () => {
 
     test('setting it moves what the campaign holds, and leaves the 5e items alone', async ({ page }) => {
       await page.goto('/dm/catalog');
-      await expect(page.getByRole('button', { name: /SRD items/ })).toHaveCount(0); // not until it's set
-      await expect(page.getByRole('link', { name: 'set this campaign’s system' })).toBeVisible();
       const description = await rowOf(page, 'Longsword').getByLabel('Description').inputValue();
       const tags = await rowOf(page, 'Longsword').getByLabel('Tags').inputValue();
       // In the shared 5e catalog but in nothing of this campaign's, like another DM's items.
@@ -129,7 +123,6 @@ test.describe('a DM with campaigns in two systems', () => {
       await expect(rowOf(page, 'Longsword').getByLabel('Description')).toHaveValue(description);
       await expect(rowOf(page, 'Longsword').getByLabel('Tags')).toHaveValue(tags);
       await expect(rowOf(page, 'Longsword').locator('td').nth(-2)).not.toHaveText('—');
-      await expect(page.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeVisible();
 
       await page.goto('/dm/inventory/1');
       await expect(page.getByRole('cell', { name: /^Longsword \+1/ })).toBeVisible();
@@ -164,9 +157,7 @@ test.describe('a DM with campaigns in two systems', () => {
     });
 
     test('a name the chosen system already has means that item', async ({ page }) => {
-      await startCampaign(page, 'Old School', '3.5e');
       await loadSrd(page, '3.5e');
-      await expect(toasts(page)).toContainText('3.5e SRD items');
 
       await setSystem(page, '3.5e');
       await page.goto('/dm/catalog?q=Longsword');
@@ -177,8 +168,6 @@ test.describe('a DM with campaigns in two systems', () => {
     test('confirming 5e copies nothing and locks it', async ({ page }) => {
       await setSystem(page, '5e');
       await expect(toasts(page)).toContainText('plays 5e, and that’s now fixed.');
-      await page.goto('/dm/catalog');
-      await expect(page.getByRole('button', { name: 'Load 5e SRD items' })).toBeVisible();
       await startCampaign(page, 'Old School', '3.5e');
       await expect(rowOf(page, 'Longsword')).toHaveCount(0);
     });
@@ -243,14 +232,9 @@ test.describe('a DM with campaigns in two systems', () => {
 
   test('Pathfinder campaigns start with no items to load, and DMs add their own', async ({ page }) => {
     await startCampaign(page, 'Rise of Runelords', 'Pathfinder 1e');
-    await expect(page.getByRole('button', { name: /SRD items/ })).toHaveCount(0);
+    await expect(page.locator('main')).not.toContainText('SRD');
     await expect(page.locator('#catalog-body')).toContainText('No items match.');
     await expect(page.locator('main header')).toContainText('Pathfinder 1e');
-    // Asking anyway, as a tab from before or a hand-made request might, gets an answer rather than an error.
-    const token = await page.locator('input[name="_csrf"]').first().getAttribute('value');
-    const res = await page.request.post('/dm/catalog/import-srd', { form: { edition: 'pf1e', _csrf: token! }, headers: { 'HX-Request': 'true' } });
-    expect(res.status()).toBe(200);
-    expect(decodeURIComponent(res.headers()['hx-trigger'] ?? '')).toContain('There are no SRD items to load for Pathfinder 1e.');
 
     await addItem(page, 'Longsword');
     await expect(rowOf(page, 'Longsword')).toHaveCount(1);
@@ -273,27 +257,35 @@ test.describe('a DM with campaigns in two systems', () => {
     await longsword.getByLabel('Description').blur();
     await expect(toasts(page)).toContainText('Saved Longsword.');
 
-    await loadSrd(page, '5e');
+    const load = async (system: string) => {
+      await page.goto('/admin');
+      await page.getByRole('button', { name: `Load ${system} SRD items` }).click();
+    };
+    await signInAsAdmin(page);
+    await load('5e');
     await expect(toasts(page)).toContainText(/Added \d+ 5e SRD items and skipped \d+ already in the catalog\./);
+    await load('3.5e');
+    await expect(toasts(page)).toContainText(/Added \d+ 3\.5e SRD items\./);
+    // Once everything's in, the button says so rather than offering to do nothing.
+    await expect(page.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeDisabled();
+    await expect(page.getByRole('article', { name: '3.5e SRD' })).toContainText('Loaded');
+
+    await signInAsDm(page);
+    await page.goto('/dm/catalog');
     await expect(longsword.getByLabel('Description')).toHaveValue('The smith’s own.');
     await expect(rowOf(page, 'Greatsword').getByLabel('Description')).toHaveValue('2d6 slashing. Heavy, two-handed.');
     await expect(rowOf(page, 'Greatsword').getByLabel('Tags')).toHaveValue('heavy, martial, melee, two-handed');
     await expect(page.locator('#tag-filter')).toContainText('two-handed');
 
     await startCampaign(page, 'Old School', '3.5e');
-    await loadSrd(page, '3.5e');
-    await expect(toasts(page)).toContainText(/Added \d+ 3\.5e SRD items\./);
     await expect(rowOf(page, 'Longsword').getByLabel('Weight')).toHaveValue('4');
     await expect(rowOf(page, 'Longsword').getByLabel('Description')).toContainText('Critical 19-20/×2');
-
-    await loadSrd(page, '3.5e');
-    await expect(toasts(page)).toContainText(/Added 0 3\.5e SRD items and skipped \d+ already in the catalog\./);
+    await expect(page.locator('main')).not.toContainText('aren’t in this catalog yet');
   });
 
   test('stocking a shelf by name finds the campaign’s own system', async ({ page }) => {
-    await startCampaign(page, 'Old School', '3.5e');
     await loadSrd(page, '3.5e');
-    await expect(toasts(page)).toContainText('3.5e SRD items');
+    await startCampaign(page, 'Old School', '3.5e');
 
     const suggestions = await page.request.get('/dm/catalog/suggest?item=Longsword');
     expect(await suggestions.text()).toContain('4 lb');
@@ -310,20 +302,6 @@ test.describe('a DM with campaigns in two systems', () => {
     await expect(rowOf(page, 'Longsword').locator('td').nth(-2)).toHaveText('1');
   });
 
-  test('a page left open on another system won’t load the wrong items', async ({ page, context }) => {
-    await page.goto('/dm/catalog');
-    await expect(page.getByRole('button', { name: 'Load 5e SRD items' })).toBeVisible();
-
-    const other = await context.newPage();
-    await startCampaign(other, 'Old School', '3.5e');
-    await other.close();
-
-    await page.getByRole('button', { name: 'Load 5e SRD items' }).click();
-    await expect(toasts(page)).toContainText('Nothing was added: you’re running a 3.5e campaign now.');
-    await page.goto('/dm/catalog?q=Greatsword');
-    await expect(page.locator('#catalog-body')).toContainText('No items match.');
-  });
-
   test('an existing name with a straight apostrophe isn’t loaded again', async ({ page }) => {
     await page.goto('/dm/catalog');
     const form = page.locator('#catalog-form');
@@ -331,8 +309,7 @@ test.describe('a DM with campaigns in two systems', () => {
     await form.getByRole('button', { name: 'Add item' }).click();
     await expect(toasts(page)).toContainText('Added Tinker');
 
-    await page.getByRole('button', { name: 'Load 5e SRD items' }).click();
-    await expect(toasts(page)).toContainText('5e SRD items');
+    await loadSrd(page, '5e');
     await page.goto('/dm/catalog?q=Tinker');
     await expect(rows(page)).toHaveCount(1);
   });
@@ -359,6 +336,7 @@ test.describe('a DM with campaigns in two systems', () => {
     await page.goto('/pack');
     const link = page.getByRole('link', { name: 'SRD licences' });
     await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('download', 'srd-notices.txt');
     const notices = await (await page.request.get((await link.getAttribute('href'))!)).text();
     expect(notices).toContain('OPEN GAME LICENSE Version 1.0a');
     expect(notices).toContain('Commons Attribution 4.0 International License');

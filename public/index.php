@@ -18,7 +18,9 @@ $routes = [
     ['GET',  '/account/password',          'account_password_form'],
     ['POST', '/account/password',          'account_password_submit'],
 
-    // Admin: logins and the account log
+    // Admin: the dashboard, logins and the account log
+    ['GET',  '/admin',                     'admin_dashboard'],
+    ['POST', '/admin/srd',                 'admin_import_srd'],
     ['GET',  '/admin/users',               'admin_users'],
     ['POST', '/admin/users',               'admin_user_create'],
     ['POST', '/admin/users/{id}/delete',   'admin_user_delete'],
@@ -68,7 +70,6 @@ $routes = [
     // DM: catalog
     ['GET',  '/dm/catalog',                'dm_catalog'],
     ['POST', '/dm/catalog',                'dm_catalog_create'],
-    ['POST', '/dm/catalog/import-srd',     'dm_catalog_import_srd'],
     ['GET',  '/dm/catalog/suggest',        'dm_catalog_suggest'],
     ['POST', '/dm/catalog/{id}',           'dm_catalog_update'],
     ['POST', '/dm/catalog/{id}/delete',    'dm_catalog_delete'],

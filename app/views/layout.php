@@ -47,7 +47,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <div class="nav-rule"></div>
     <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
     <?= $nav('password', '/account/password', 'Change password') ?>
-    <a class="nav-link" href="<?= e(url('/assets/srd-notices.txt')) ?>" hx-boost="false">SRD licences</a>
+    <a class="nav-link" href="<?= e(url('/assets/srd-notices.txt')) ?>" download="srd-notices.txt" hx-boost="false">SRD licences</a>
     <?php if (!admin_exists()): ?><?= $nav('admin-account', '/dm/admin-account', 'Create the admin account') ?><?php endif; ?>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
@@ -59,15 +59,17 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
 <?php elseif ($user && $user['role'] === 'admin'): ?>
 <div class="shell">
   <nav class="sidebar" aria-label="Main">
-    <a class="brand" href="<?= e(url('/admin/users')) ?>">
+    <a class="brand" href="<?= e(url('/admin')) ?>">
       <?= render('partials/icon_pouch', []) ?>
       <span>Quartermaster</span>
     </a>
     <p class="campaign-name">Admin</p>
+    <?= $nav('dashboard', '/admin', 'Dashboard') ?>
     <?= $nav('users', '/admin/users', 'Users') ?>
     <?= $nav('log', '/admin/log', 'Account log') ?>
     <div class="nav-rule"></div>
     <?= $nav('password', '/account/password', 'Change password') ?>
+    <a class="nav-link" href="<?= e(url('/assets/srd-notices.txt')) ?>" hx-boost="false">SRD licences</a>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
       <button class="nav-link nav-button" type="submit">Sign out (<?= e($user['username']) ?>)</button>
@@ -99,7 +101,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     </div>
   </header>
   <?= $content ?>
-  <footer class="muted small" style="padding:16px;text-align:center"><a href="<?= e(url('/assets/srd-notices.txt')) ?>" hx-boost="false">SRD licences</a></footer>
+  <footer class="muted small" style="padding:16px;text-align:center"><a href="<?= e(url('/assets/srd-notices.txt')) ?>" download="srd-notices.txt" hx-boost="false">SRD licences</a></footer>
 </div>
 <?php else: ?>
 <div class="auth-shell">

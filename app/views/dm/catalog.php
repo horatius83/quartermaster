@@ -11,12 +11,8 @@ $lockRows = 'hx-disabled-elt="' . e(CATALOG_ROW_FIELDS) . '"';
     <p class="muted" style="margin:6px 0 0;max-width:640px">Every item that can sit in a pack or on a shelf in a <?= e($system) ?> campaign. Items you type into the give or stock forms are added here automatically. Every DM’s <?= e($system) ?> campaigns share these items.</p>
   </header>
 
-  <?php if ((int)current_campaign()['ruleset_open']): ?>
-  <p class="muted" style="margin:0">Before loading SRD items, <a href="<?= e(url('/dm/campaigns')) ?>">set this campaign’s system</a>.</p>
-  <?php elseif (in_array(campaign_ruleset(), SRD_RULESETS, true)): ?>
-  <div class="form-row">
-    <button class="btn" type="button" hx-post="<?= e(url('/dm/catalog/import-srd')) ?>" hx-target="#catalog-body" hx-swap="outerHTML" hx-include="<?= e(CATALOG_SAVE_INCLUDES) ?>" hx-vals='<?= e(json_encode(['edition' => campaign_ruleset()])) ?>' hx-confirm="Add the <?= e($system) ?> SRD weapons, armor and gear to the catalog? Every DM shares the catalog. Items it already has are left as they are." <?= $lockRows ?>>Load <?= e($system) ?> SRD items</button>
-  </div>
+  <?php if (!(int)current_campaign()['ruleset_open'] && in_array(campaign_ruleset(), SRD_RULESETS, true) && srd_status(campaign_ruleset())['present'] === 0): ?>
+  <p class="muted" style="margin:0">The <?= e($system) ?> SRD weapons, armor and gear aren’t in this catalog yet. <?= admin_exists() ? 'The admin can load them from their dashboard.' : 'An admin can load them from their dashboard, once there is one: <a href="' . e(url('/dm/admin-account')) . '">create the admin account</a>.' ?></p>
   <?php endif; ?>
 
   <form id="catalog-form" class="card card-dashed form-row" hx-post="<?= e(url('/dm/catalog')) ?>" hx-target="#catalog-body" hx-swap="outerHTML" hx-include="<?= e(CATALOG_SAVE_INCLUDES) ?>" <?= $lockRows ?>>

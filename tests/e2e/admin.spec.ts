@@ -1,8 +1,7 @@
 import type { Page } from '@playwright/test';
-import { test, expect, signIn, signInAsDm, toasts, ADMIN, BRYN } from './fixtures';
+import { test, expect, signIn, signInAsAdmin, signInAsDm, toasts, BRYN } from './fixtures';
 import { resetDatabase } from './php';
 
-const signInAsAdmin = (page: Page) => signIn(page, ADMIN.username, ADMIN.password);
 const userRow = (page: Page, username: string) =>
   page.getByRole('table', { name: 'All logins' }).getByRole('row').filter({ has: page.getByText(username, { exact: true }) });
 
@@ -22,9 +21,36 @@ async function startCampaign(page: Page, name: string, system: string) {
   await expect(page).toHaveURL(/\/dm\/party$/);
 }
 
-test('the admin signs in to the list of every login', async ({ page }) => {
+test('the admin signs in to the dashboard, and the SRD loaders say what they’d add', async ({ page }) => {
   await signInAsAdmin(page);
-  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page).toHaveURL(/\/admin$/);
+  const five = page.getByRole('article', { name: '5e SRD', exact: true });
+  const threeFive = page.getByRole('article', { name: '3.5e SRD' });
+  // The demo's 5e catalog has some SRD gear already; its 3.5e catalog has none.
+  await expect(five).toContainText('Partly loaded');
+  await expect(threeFive).toContainText('Not loaded');
+  await expect(five.getByRole('button', { name: 'Load 5e SRD items' })).toBeEnabled();
+
+  await five.getByRole('button', { name: 'Load 5e SRD items' }).click();
+  await expect(toasts(page)).toContainText(/Added \d+ 5e SRD items and skipped \d+ already in the catalog\./);
+  await expect(five).toContainText('Loaded');
+  await expect(five).toContainText('There’s nothing to add.');
+  await expect(five.getByRole('button', { name: 'Load 5e SRD items' })).toBeDisabled();
+  await expect(threeFive.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeEnabled();
+
+  // Asking anyway, as a page from before or a hand-made request might, adds nothing and says so.
+  const token = await page.locator('input[name="_csrf"]').first().getAttribute('value');
+  await page.request.post('/admin/srd', { form: { edition: '5e', _csrf: token! }, maxRedirects: 0 });
+  await page.reload();
+  await expect(toasts(page)).toContainText(/Added 0 5e SRD items and skipped \d+ already in the catalog\./);
+  await page.request.post('/admin/srd', { form: { edition: 'pf1e', _csrf: token! }, maxRedirects: 0 });
+  await page.reload();
+  await expect(toasts(page)).toContainText('There are no SRD items to load for Pathfinder 1e.');
+});
+
+test('the admin can see every login', async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.goto('/admin/users');
   await expect(userRow(page, 'dm')).toContainText('The Sunken Crown');
   await expect(userRow(page, 'dm')).toContainText('Winter’s Teeth');
   await expect(userRow(page, 'bryn')).toContainText('Bryn Ashvale');
@@ -36,7 +62,7 @@ test('the admin signs in to the list of every login', async ({ page }) => {
 test('only the admin can open the admin pages', async ({ page }) => {
   for (const who of [() => signInAsDm(page), () => signIn(page, 'bryn')]) {
     await who();
-    for (const path of ['/admin/users', '/admin/log']) {
+    for (const path of ['/admin', '/admin/users', '/admin/log']) {
       await page.goto(path);
       await expect(page.getByText('Only the admin can do that.')).toBeVisible();
     }
@@ -180,7 +206,7 @@ test('player logins the DM adds and removes are logged too', async ({ page }) =>
 });
 
 test('a fresh install’s DM creates the admin account once', async ({ page }) => {
-  resetDatabase({ empty: true });
+  await resetDatabase({ empty: true });
   await page.goto('/setup');
   await page.getByLabel('DM username').fill('dm');
   await page.getByLabel('Password (8+ characters)').fill('dungeon123');
@@ -198,7 +224,8 @@ test('a fresh install’s DM creates the admin account once', async ({ page }) =
   await expect(page).toHaveURL(/\/dm$/);
 
   await signIn(page, 'keeper', 'keeper123');
-  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page).toHaveURL(/\/admin$/);
+  await page.goto('/admin/users');
   await expect(userRow(page, 'dm')).toContainText('Shadows over Brindle');
   await page.goto('/admin/log');
   const rows = page.locator('table.ledger tbody tr');

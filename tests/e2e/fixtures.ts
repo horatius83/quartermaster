@@ -1,5 +1,8 @@
 import { test as base, expect, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
-import { resetDatabase } from './php';
+import { resetDatabase, testDb } from './php';
+
+/** Tells the test server which worker's database a browser's requests use (tests/e2e/test-db.php). */
+const withTestDb = (headers?: Record<string, string>) => ({ ...headers, 'X-QM-Test-Db': testDb() });
 
 // Demo seed logins (scripts/seed-demo.php). Character ids follow the seed order.
 export const DM = { username: 'dm', password: 'dungeon123' };
@@ -24,6 +27,16 @@ export async function signIn(page: Page, username: string, password = PLAYER_PAS
 }
 
 export const signInAsDm = (page: Page) => signIn(page, DM.username, DM.password);
+export const signInAsAdmin = (page: Page) => signIn(page, ADMIN.username, ADMIN.password);
+
+/** Load a system's SRD items from the admin dashboard, then sign back in as the DM. */
+export async function loadSrd(page: Page, system: string): Promise<void> {
+  await signInAsAdmin(page);
+  await page.goto('/admin');
+  await page.getByRole('button', { name: `Load ${system} SRD items` }).click();
+  await expect(toasts(page)).toContainText(`${system} SRD item`);
+  await signInAsDm(page);
+}
 
 /** The toast area; messages fade after a few seconds, so check them straight after the action. */
 export const toasts = (page: Page) => page.locator('#toasts');
@@ -32,10 +45,13 @@ export const toasts = (page: Page) => page.locator('#toasts');
 export type OpenPage = (options?: BrowserContextOptions) => Promise<Page>;
 
 export const test = base.extend<{ freshDatabase: void; openPage: OpenPage }>({
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, use) => {
+    await use(withTestDb(extraHTTPHeaders));
+  },
   openPage: async ({ browser }, use) => {
     const contexts: BrowserContext[] = [];
     await use(async (options) => {
-      const context = await browser.newContext(options);
+      const context = await browser.newContext({ ...options, extraHTTPHeaders: withTestDb(options?.extraHTTPHeaders) });
       contexts.push(context);
       return context.newPage();
     });
@@ -44,7 +60,7 @@ export const test = base.extend<{ freshDatabase: void; openPage: OpenPage }>({
   // Every test starts from the demo seed and accepts hx-confirm dialogs.
   freshDatabase: [
     async ({ page }, use) => {
-      resetDatabase();
+      await resetDatabase();
       page.on('dialog', (dialog) => dialog.accept());
       await use();
     },

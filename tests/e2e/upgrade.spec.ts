@@ -30,7 +30,7 @@ test('an upgrade that stopped partway is finished on the next run', () => {
 });
 
 test('setup taking over an upgraded campaign converts its items to the chosen system', async ({ page }) => {
-  resetDatabase({ empty: true });
+  await resetDatabase({ empty: true });
   makeOwnerlessCampaign();
   await page.goto('/setup');
   await page.getByLabel('DM username').fill('dm');
@@ -43,7 +43,7 @@ test('setup taking over an upgraded campaign converts its items to the chosen sy
   await page.goto('/dm/catalog');
   await expect(page.locator('#catalog-body').locator('input[name="name"][value="Old sword"]')).toHaveCount(1);
   await expect(page.locator('#catalog-body tr td').nth(-2)).toHaveText('1');
-  await expect(page.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeVisible();
+  await expect(page.locator('main')).toContainText('The 3.5e SRD weapons, armor and gear aren’t in this catalog yet.');
 
   await page.goto('/dm/campaigns');
   await expect(page.getByRole('button', { name: 'Set once' })).toHaveCount(0);
@@ -51,7 +51,7 @@ test('setup taking over an upgraded campaign converts its items to the chosen sy
 });
 
 test('a fresh install names its first campaign during setup', async ({ page }) => {
-  resetDatabase({ empty: true });
+  await resetDatabase({ empty: true });
   await page.goto('/');
   await expect(page).toHaveURL(/\/setup$/);
   // A too-short password comes back with the username and campaign still filled in.

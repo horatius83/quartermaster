@@ -41,6 +41,21 @@ function verify_csrf(): void
 const STAFF_PASSWORD_MIN = 8;
 
 /**
+ * Options for password_hash() and password_needs_rehash(): PHP's default cost unless the config sets
+ * 'password_cost'. Only the end-to-end tests set it, low, since every test seeds logins and signs in.
+ */
+function password_options(): array
+{
+    $cost = config('password_cost');
+    return is_int($cost) ? ['cost' => $cost] : [];
+}
+
+function hash_password(string $password): string
+{
+    return password_hash($password, PASSWORD_DEFAULT, password_options());
+}
+
+/**
  * A session remembers the login's session_version from when it signed in. Bumping the version
  * (set_password does) ends every session that has the old one. A session with no version at all
  * signed in before versions existed, and is signed out too, so it can't outlive a reset.
@@ -176,9 +191,9 @@ function check_password(string $username, ?array $user, string $password, string
     }
     if (!$user) {
         // Spend as long as checking a real login's password does, so how fast the answer comes back doesn't
-        // tell a guesser which names exist. Hashing at the default cost takes as long as verifying a hash
+        // tell a guesser which names exist. Hashing at the configured cost takes as long as verifying a hash
         // made at it (which every login's is after its next sign-in).
-        password_hash($password, PASSWORD_DEFAULT);
+        hash_password($password);
     }
 
     q('DELETE FROM login_attempts WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - SIGN_IN_WINDOW)]);

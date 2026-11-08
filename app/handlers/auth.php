@@ -16,7 +16,7 @@ function home(): void
         redirect('/setup');
     }
     $user = require_login();
-    redirect(match ($user['role']) { 'admin' => '/admin/users', 'dm' => '/dm', default => '/shop' });
+    redirect(match ($user['role']) { 'admin' => '/admin', 'dm' => '/dm', default => '/shop' });
 }
 
 function login_form(): void
@@ -37,8 +37,8 @@ function login_submit(): void
         $error = $result === 'blocked' ? wrong_password_pause_message() : 'That name and password don’t match our ledger.';
         page('auth/login', ['error' => $error, 'username' => $username], 'Sign in');
     }
-    if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {
-        q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $user['id']]);
+    if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT, password_options())) {
+        q('UPDATE users SET password_hash = ? WHERE id = ?', [hash_password($password), $user['id']]);
     }
     login_user($user);
     redirect('/');
