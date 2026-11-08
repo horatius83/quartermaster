@@ -5,7 +5,6 @@ declare(strict_types=1);
 
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 require __DIR__ . '/../../app/bootstrap.php';
-require_once __DIR__ . '/../../app/handlers/dm_catalog.php';
 
 $slugs = array_column(categories(), 'slug');
 $problems = [];

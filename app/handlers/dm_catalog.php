@@ -231,68 +231,6 @@ function dm_catalog_delete(int $id): void
     catalog_redraw();
 }
 
-/** A name in the form the import compares, since DMs usually type a straight apostrophe where the data has a curly one. */
-function srd_name_key(string $name): string
-{
-    return mb_strtolower(str_replace('’', "'", $name));
-}
-
-/** The bundled SRD items for a system in SRD_RULESETS: [name, category slug, weight, price, tags, description] rows. */
-function srd_items(string $ruleset): array
-{
-    return require APP_DIR . "/data/srd-{$ruleset}.php";
-}
-
-/**
- * Load the SRD items for the current campaign's system. A name that system already has is skipped, so a DM's own
- * prices and descriptions are never overwritten.
- */
-function dm_catalog_import_srd(): void
-{
-    require_dm();
-    $ruleset = campaign_ruleset();
-    // Setting the system copies the old catalog across, which would take all of these along if they were loaded first.
-    if ((int)current_campaign()['ruleset_open']) {
-        htmx_fail('Set this campaign’s system under Campaigns first.');
-    }
-    if (!in_array($ruleset, SRD_RULESETS, true)) {
-        htmx_fail('There are no SRD items to load for ' . ruleset_label($ruleset) . '.');
-    }
-    // The button says which system it loads. Another tab may have switched to a campaign of a different one since.
-    if (post_str('edition', 10) !== $ruleset) {
-        htmx_fail('Nothing was added: you’re running a ' . ruleset_label($ruleset) . ' campaign now. Reload this page, then try again.');
-    }
-    $categoryIds = array_column(categories(), 'id', 'slug');
-    $rows = srd_items($ruleset);
-    // The database decides what counts as the same name, so its collation is what's asked here, not PHP.
-    $taken = q_all('SELECT name FROM items WHERE ruleset = ?', [$ruleset]);
-    $seen = array_flip(array_map(srd_name_key(...), array_column($taken, 'name')));
-    $added = transaction(function () use ($ruleset, $categoryIds, $rows, $seen) {
-        $added = 0;
-        foreach ($rows as [$name, $slug, $weight, $price, $tags, $description]) {
-            if (isset($seen[srd_name_key($name)])) {
-                continue;
-            }
-            try {
-                $item = create_item($name, (int)$categoryIds[$slug], (float)$weight, parse_price($price) ?? 0, $description, $ruleset);
-            } catch (PDOException $e) {
-                // The database's own rules call it taken after all (an accented spelling, or someone adding it just now).
-                if (!item_by_name($name, $ruleset)) {
-                    throw $e;
-                }
-                continue;
-            }
-            set_item_tags((int)$item['id'], $tags);
-            $added++;
-        }
-        return $added;
-    });
-    $skipped = count($rows) - $added;
-    toast("Added {$added} " . ruleset_label($ruleset) . ' SRD ' . ($added === 1 ? 'item' : 'items') . ($skipped ? " and skipped {$skipped} already in the catalog." : '.'));
-    refresh_tag_filter();
-    catalog_redraw();
-}
-
 /** <option>s for the item-name <datalist> on the give / stock forms. */
 function dm_catalog_suggest(): void
 {

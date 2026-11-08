@@ -6,6 +6,41 @@ declare(strict_types=1);
 
 const ADMIN_LOG_PAGE_SIZE = 50;
 
+/** The admin's home: what's in the install at a glance, and loading each system's SRD items into its catalog. */
+function admin_dashboard(): void
+{
+    require_admin();
+    $srd = [];
+    foreach (SRD_RULESETS as $ruleset) {
+        $srd[$ruleset] = srd_status($ruleset) + ['label' => ruleset_label($ruleset)];
+    }
+    page('admin/dashboard', [
+        'active'    => 'dashboard',
+        'counts'    => q_one(
+            "SELECT (SELECT COUNT(*) FROM users WHERE role = 'dm') AS dms,
+                    (SELECT COUNT(*) FROM users WHERE role = 'player') AS players,
+                    (SELECT COUNT(*) FROM campaigns) AS campaigns,
+                    (SELECT COUNT(*) FROM items) AS items"
+        ),
+        'srd'       => $srd,
+    ], 'Dashboard');
+}
+
+/** Load one system's SRD items into its catalog, which every DM's campaigns of that system share. */
+function admin_import_srd(): void
+{
+    require_admin();
+    $ruleset = post_str('edition', 10);
+    if (!in_array($ruleset, SRD_RULESETS, true)) {
+        flash('There are no SRD items to load for ' . ruleset_label($ruleset) . '.', 'error');
+        redirect('/admin');
+    }
+    $added = import_srd($ruleset);
+    $skipped = count(srd_items($ruleset)) - $added;
+    flash("Added {$added} " . ruleset_label($ruleset) . ' SRD ' . ($added === 1 ? 'item' : 'items') . ($skipped ? " and skipped {$skipped} already in the catalog." : '.'));
+    redirect('/admin');
+}
+
 function admin_users(): void
 {
     $me = require_admin();

@@ -24,6 +24,16 @@ export async function signIn(page: Page, username: string, password = PLAYER_PAS
 }
 
 export const signInAsDm = (page: Page) => signIn(page, DM.username, DM.password);
+export const signInAsAdmin = (page: Page) => signIn(page, ADMIN.username, ADMIN.password);
+
+/** Load a system's SRD items from the admin dashboard, then sign back in as the DM. */
+export async function loadSrd(page: Page, system: string): Promise<void> {
+  await signInAsAdmin(page);
+  await page.goto('/admin');
+  await page.getByRole('button', { name: `Load ${system} SRD items` }).click();
+  await expect(toasts(page)).toContainText(`${system} SRD item`);
+  await signInAsDm(page);
+}
 
 /** The toast area; messages fade after a few seconds, so check them straight after the action. */
 export const toasts = (page: Page) => page.locator('#toasts');

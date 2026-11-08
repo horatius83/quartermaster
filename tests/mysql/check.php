@@ -96,7 +96,6 @@ $check('each edition can have an item of the same name', 2, (int)q_val("SELECT C
 $check('an item is found in its own edition', '3.5e', item_by_name('EDITION SWORD', '3.5e')['ruleset'] ?? null);
 
 // The bundled SRD items have to fit the real columns, which SQLite wouldn't enforce.
-require_once __DIR__ . '/../../app/handlers/dm_catalog.php';
 foreach (SRD_RULESETS as $ruleset) {
     $rows = srd_items($ruleset);
     $slugIds = array_column(categories(), 'id', 'slug');
