@@ -1,5 +1,8 @@
 import { test as base, expect, type BrowserContext, type BrowserContextOptions, type Page } from '@playwright/test';
-import { resetDatabase } from './php';
+import { resetDatabase, testDb } from './php';
+
+/** Tells the test server which worker's database a browser's requests use (tests/e2e/test-db.php). */
+const withTestDb = (headers?: Record<string, string>) => ({ ...headers, 'X-QM-Test-Db': testDb() });
 
 // Demo seed logins (scripts/seed-demo.php). Character ids follow the seed order.
 export const DM = { username: 'dm', password: 'dungeon123' };
@@ -32,10 +35,13 @@ export const toasts = (page: Page) => page.locator('#toasts');
 export type OpenPage = (options?: BrowserContextOptions) => Promise<Page>;
 
 export const test = base.extend<{ freshDatabase: void; openPage: OpenPage }>({
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, use) => {
+    await use(withTestDb(extraHTTPHeaders));
+  },
   openPage: async ({ browser }, use) => {
     const contexts: BrowserContext[] = [];
     await use(async (options) => {
-      const context = await browser.newContext(options);
+      const context = await browser.newContext({ ...options, extraHTTPHeaders: withTestDb(options?.extraHTTPHeaders) });
       contexts.push(context);
       return context.newPage();
     });
@@ -44,7 +50,7 @@ export const test = base.extend<{ freshDatabase: void; openPage: OpenPage }>({
   // Every test starts from the demo seed and accepts hx-confirm dialogs.
   freshDatabase: [
     async ({ page }, use) => {
-      resetDatabase();
+      await resetDatabase();
       page.on('dialog', (dialog) => dialog.accept());
       await use();
     },
