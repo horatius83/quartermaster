@@ -30,6 +30,7 @@ $routes = [
     // DM: campaigns
     ['GET',  '/dm/campaigns',              'dm_campaigns'],
     ['POST', '/dm/campaigns',              'dm_campaign_create'],
+    ['POST', '/dm/campaigns/{id}/ruleset', 'dm_campaign_set_ruleset'],
     ['POST', '/dm/campaigns/switch',       'dm_campaign_switch'],
     ['POST', '/dm/campaigns/{id}',         'dm_campaign_update'],
     ['POST', '/dm/campaigns/{id}/delete',  'dm_campaign_delete'],
@@ -66,6 +67,7 @@ $routes = [
     // DM: catalog
     ['GET',  '/dm/catalog',                'dm_catalog'],
     ['POST', '/dm/catalog',                'dm_catalog_create'],
+    ['POST', '/dm/catalog/import-srd',     'dm_catalog_import_srd'],
     ['GET',  '/dm/catalog/suggest',        'dm_catalog_suggest'],
     ['POST', '/dm/catalog/{id}',           'dm_catalog_update'],
     ['POST', '/dm/catalog/{id}/delete',    'dm_catalog_delete'],

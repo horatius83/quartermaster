@@ -23,10 +23,13 @@ CREATE INDEX ix_login_attempts_ip ON login_attempts (ip, created_at);
 
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
 -- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.
+-- ruleset is the system it plays (see CAMPAIGN_RULESETS in lib/repo.php). It decides the catalog items it uses and never changes, except that a campaign from before systems has ruleset_open = 1 and can set it once.
 CREATE TABLE campaigns (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_user_id INTEGER NULL REFERENCES users(id),
   name          TEXT NOT NULL,
+  ruleset       TEXT NOT NULL DEFAULT '5e',
+  ruleset_open  INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL
 );
 
@@ -48,13 +51,16 @@ CREATE TABLE categories (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- An item belongs to one system, so each system can have its own Longsword, and a campaign only sees its own system's.
 CREATE TABLE items (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  name        TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  ruleset     TEXT NOT NULL DEFAULT '5e',
+  name        TEXT NOT NULL COLLATE NOCASE,
   category_id INTEGER NOT NULL REFERENCES categories(id),
   weight      REAL NOT NULL DEFAULT 0,
   price_cp    INTEGER NOT NULL DEFAULT 0,
-  description TEXT NULL
+  description TEXT NULL,
+  UNIQUE (ruleset, name)
 );
 
 -- The DM's labels on an item ("simple", "ranged"), always lowercase.

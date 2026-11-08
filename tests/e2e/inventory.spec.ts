@@ -15,7 +15,8 @@ test('DM gives an item', async ({ page }) => {
   await form.getByRole('button', { name: 'Add to pack' }).click();
   await expect(toasts(page)).toContainText('Gave 2 × Lantern to Bryn Ashvale.');
   await expect(packRow(page, 'Lantern').locator('output')).toHaveText('2');
-  await expect(form.getByLabel('Item', { exact: true })).toHaveValue('');
+  // By name: suggestions land inside the label, and would change its text if they arrive first.
+  await expect(form.locator('input[name="item"]')).toHaveValue('');
 });
 
 test('− / + change the count', async ({ page }) => {

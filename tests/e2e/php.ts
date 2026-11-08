@@ -30,10 +30,36 @@ export function resetDatabase({ empty = false } = {}): void {
   execFileSync(cmd, [...args, 'tests/e2e/reset.php', ...(empty ? ['--empty'] : [])], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
 }
 
+/** Make a seeded campaign look like one from before systems, whose system can still be set once. */
+export function openCampaignSystem(name: string): void {
+  const [cmd, ...args] = phpCommand();
+  execFileSync(cmd, [...args, 'tests/e2e/open-campaign-system.php', name], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+}
+
+/** After an empty reset: an upgraded database with a campaign but no DM yet, whose character holds a 5e item. */
+export function makeOwnerlessCampaign(): void {
+  const [cmd, ...args] = phpCommand();
+  execFileSync(cmd, [...args, 'tests/e2e/ownerless-campaign.php'], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+}
+
 /** Run tests/e2e/session-check.php: who current_user() sees for a hand-made DM session, and what's left in it. */
 export function checkSession(kind: 'legacy' | 'current' | 'deleted'): { user: string | null; sessionKeys: string[] } {
   const [cmd, ...args] = phpCommand();
   const out = execFileSync(cmd, [...args, 'tests/e2e/session-check.php', kind], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+  return JSON.parse(out.toString());
+}
+
+/** Run tests/e2e/srd-data-check.php: whether every bundled SRD row is one the catalog accepts. */
+export function checkSrdData(): { problems: string[] } {
+  const [cmd, ...args] = phpCommand();
+  const out = execFileSync(cmd, [...args, 'tests/e2e/srd-data-check.php'], { cwd: ROOT, env: { ...process.env, ...phpEnv }, stdio: 'pipe' });
+  return JSON.parse(out.toString());
+}
+
+/** Run tests/e2e/upgrade-rulesets-check.php and return what upgrade 006 left behind. */
+export function upgradeToRulesets(): unknown {
+  const [cmd, ...args] = phpCommand();
+  const out = execFileSync(cmd, [...args, 'tests/e2e/upgrade-rulesets-check.php'], { cwd: ROOT, stdio: 'pipe' });
   return JSON.parse(out.toString());
 }
 

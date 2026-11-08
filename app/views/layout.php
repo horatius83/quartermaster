@@ -12,11 +12,8 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($title) ?> · Quartermaster</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap">
 <link rel="stylesheet" href="<?= e(url('/assets/app.css')) ?>">
-<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+<script src="<?= e(url('/assets/htmx-2.0.4.min.js')) ?>"></script>
 <script src="<?= e(url('/assets/app.js')) ?>" defer></script>
 </head>
 <body hx-boost="true" hx-headers='{"X-CSRF-Token": "<?= e(csrf_token()) ?>"}'>
@@ -50,6 +47,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <div class="nav-rule"></div>
     <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
     <?= $nav('password', '/account/password', 'Change password') ?>
+    <a class="nav-link" href="<?= e(url('/assets/srd-notices.txt')) ?>" hx-boost="false">SRD licences</a>
     <?php if (!admin_exists()): ?><?= $nav('admin-account', '/dm/admin-account', 'Create the admin account') ?><?php endif; ?>
     <form method="post" action="<?= e(url('/logout')) ?>">
       <?= csrf_field() ?>
@@ -101,6 +99,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     </div>
   </header>
   <?= $content ?>
+  <footer class="muted small" style="padding:16px;text-align:center"><a href="<?= e(url('/assets/srd-notices.txt')) ?>" hx-boost="false">SRD licences</a></footer>
 </div>
 <?php else: ?>
 <div class="auth-shell">

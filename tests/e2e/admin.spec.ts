@@ -14,6 +14,14 @@ async function addLogin(page: Page, username: string, password: string, role: 'D
   await page.getByRole('button', { name: 'Add login' }).click();
 }
 
+async function startCampaign(page: Page, name: string, system: string) {
+  await page.goto('/dm/campaigns');
+  await page.getByLabel('New campaign').fill(name);
+  await page.locator('form', { has: page.getByLabel('New campaign') }).getByLabel(/^System/).selectOption({ label: system });
+  await page.getByRole('button', { name: 'Start campaign' }).click();
+  await expect(page).toHaveURL(/\/dm\/party$/);
+}
+
 test('the admin signs in to the list of every login', async ({ page }) => {
   await signInAsAdmin(page);
   await expect(page).toHaveURL(/\/admin\/users$/);
@@ -45,12 +53,18 @@ test('a new DM sees only their own campaigns', async ({ page }) => {
   await expect(toasts(page)).toContainText('morgan can now sign in');
   await expect(userRow(page, 'morgan')).toContainText('DM');
 
+  // With no campaign yet, every DM page sends morgan to start one, picking its system.
   await signIn(page, 'morgan', 'dungeon456');
-  await expect(page).toHaveURL(/\/dm$/);
+  await expect(page).toHaveURL(/\/dm\/campaigns$/);
+  await expect(toasts(page)).toContainText('Start a campaign first: give it a name and pick the system it plays.');
+  await expect(page.locator('table.ledger')).toContainText('No campaigns yet.');
+  await page.goto('/dm/catalog');
+  await expect(page).toHaveURL(/\/dm\/campaigns$/);
+  await startCampaign(page, 'Morgan’s Keep', '3.5e');
   const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav).toContainText('My Campaign');
   await expect(nav).not.toContainText('The Sunken Crown');
   await page.goto('/dm/campaigns');
+  await expect(page.locator('tbody tr', { hasText: '3.5e' })).toHaveCount(1);
   await expect(page.locator('table.ledger')).not.toContainText('Winter’s Teeth');
   // The other DM's characters can't be reached by id either.
   await page.goto(`/dm/inventory/${BRYN}`);
@@ -84,11 +98,11 @@ test('deleting a DM with only empty campaigns removes them, and it is logged', a
   await signInAsAdmin(page);
   await addLogin(page, 'morgan', 'dungeon456');
   await expect(toasts(page)).toContainText('morgan can now sign in');
-  // Signing in once gives morgan an empty "My Campaign".
   await signIn(page, 'morgan', 'dungeon456');
+  await startCampaign(page, 'Morgan’s Keep', '5e');
   await signInAsAdmin(page);
   await page.goto('/admin/users');
-  await expect(userRow(page, 'morgan')).toContainText('My Campaign');
+  await expect(userRow(page, 'morgan')).toContainText('Morgan’s Keep');
   await userRow(page, 'morgan').getByRole('button', { name: 'Delete morgan' }).click();
   await expect(toasts(page)).toContainText('Deleted morgan.');
   await expect(userRow(page, 'morgan')).toHaveCount(0);
@@ -96,7 +110,7 @@ test('deleting a DM with only empty campaigns removes them, and it is logged', a
   await page.goto('/admin/log');
   const rows = page.locator('table.ledger tbody tr');
   await expect(rows.nth(0)).toContainText('Deleted DM morgan');
-  await expect(rows.nth(0)).toContainText('Empty campaigns deleted too: My Campaign');
+  await expect(rows.nth(0)).toContainText('Empty campaigns deleted too: Morgan’s Keep');
   await expect(rows.nth(0)).toContainText('admin');
   await expect(rows.nth(1)).toContainText('Added DM morgan');
 

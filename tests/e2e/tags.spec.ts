@@ -9,7 +9,15 @@ const shopFilter = (page: Page) => page.getByRole('navigation', { name: 'Filter 
 const wares = (page: Page) => page.locator('#wares article h2');
 // htmx finishes a swap about 20ms after new rows appear. An edit made inside that window, far quicker than anyone
 // could type, may not save, so a test editing a row it just filtered to waits for this first.
-const swapFinished = (page: Page) => expect(page.locator('.htmx-added, .htmx-settling')).toHaveCount(0);
+/** Nothing in flight or settling. The shop's chips ignore a click while a request runs (hx-sync), so a test has to wait for it too. */
+const swapFinished = (page: Page) => expect(page.locator('.htmx-request, .htmx-added, .htmx-settling')).toHaveCount(0);
+/**
+ * Signing in lands on the first shop, which is this one. Clicking its link would pass every "is it there?" check
+ * straight away, and the click's reply would then replace the page under whatever the test does next.
+ */
+const openFletchersRest = async (page: Page) => {
+  await page.goto((await page.getByRole('link', { name: 'Fletcher’s Rest' }).getAttribute('href'))!);
+};
 const pick = async (nav: Locator, name: string) => {
   await swapFinished(nav.page());
   await nav.getByRole('link', { name }).click();
@@ -287,7 +295,7 @@ test.describe('DM', () => {
     await form.getByLabel('New item').fill('longbow');
     await form.getByLabel('Tags').fill('stolen');
     await form.getByRole('button', { name: 'Add item' }).click();
-    await expect(toasts(page)).toContainText('is already in the catalog.');
+    await expect(toasts(page)).toContainText('is already in the catalog for 5e.');
     await page.reload();
     await expect(rowOf(page, 'Longbow').getByLabel('Tags')).toHaveValue('martial, ranged');
   });
@@ -388,7 +396,7 @@ test.describe('Player', () => {
 
   test('a filtered address works on its own, and buying still works from it', async ({ page }) => {
     await signIn(page, 'bryn');
-    await page.getByRole('link', { name: 'Fletcher’s Rest' }).click();
+    await openFletchersRest(page);
     await pick(shopFilter(page), 'ranged');
     await expect(shopFilter(page).getByRole('link', { name: 'ranged' })).toHaveAttribute('aria-current', 'true');
     await pick(shopFilter(page), 'martial');
@@ -439,7 +447,7 @@ test.describe('Player', () => {
 
   test('a second chip click during a slow load is ignored, not mixed up', async ({ page }) => {
     await signIn(page, 'bryn');
-    await page.getByRole('link', { name: 'Fletcher’s Rest' }).click();
+    await openFletchersRest(page);
     await expect(page.getByRole('heading', { name: 'Fletcher’s Rest' })).toBeVisible();
     await expect(shopFilter(page).getByRole('link', { name: 'martial' })).toBeVisible();
     await swapFinished(page);

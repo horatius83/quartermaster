@@ -52,14 +52,26 @@
     evt.detail.xhr.addEventListener('loadend', function () {
       rowSaves--;
       if (rowSaves === 0) {
-        waitingRedraws.splice(0).forEach(function (redraw) { redraw(true); });
+        waitingRedraws.splice(0).forEach(function (waiting) {
+          if (document.body.contains(waiting.elt)) {
+            waiting.issueRequest(true);
+            return;
+          }
+          // The save replaced the row this request came from, and htmx drops requests from removed elements.
+          // Its replacement isn't wired up until the swap settles, so do that now. htmx won't do it a second time.
+          var again = waiting.elt.id && document.getElementById(waiting.elt.id);
+          if (again) {
+            htmx.process(again);
+            again.click();
+          }
+        });
       }
     });
   });
   document.addEventListener('htmx:confirm', function (evt) {
     if (rowSaves > 0 && evt.detail.target && evt.detail.target.id === 'catalog-body') {
       evt.preventDefault();
-      waitingRedraws.push(evt.detail.issueRequest);
+      waitingRedraws.push(evt.detail);
     }
   });
 

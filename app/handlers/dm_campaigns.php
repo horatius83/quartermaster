@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 function dm_campaigns(): void
 {
-    require_dm();
+    require_dm(needsCampaign: false);
     page('dm/campaigns', [
         'active'    => 'campaigns',
         'campaigns' => campaigns(),
@@ -13,13 +13,13 @@ function dm_campaigns(): void
 
 function dm_campaign_create(): void
 {
-    require_dm();
+    require_dm(needsCampaign: false);
     $name = post_str('name', 100);
     if ($name === '') {
         flash('Give the campaign a name.', 'error');
         redirect('/dm/campaigns');
     }
-    switch_campaign(create_campaign($name, owner_id()));
+    switch_campaign(create_campaign($name, owner_id(), posted_campaign_ruleset()));
     flash("{$name} begins. Add its adventurers to get started.");
     redirect('/dm/party');
 }
@@ -35,6 +35,39 @@ function dm_campaign_update(int $id): void
     }
     q('UPDATE campaigns SET name = ? WHERE id = ?', [$name, $id]);
     flash("Renamed {$campaign['name']} to {$name}.");
+    redirect('/dm/campaigns');
+}
+
+/** A campaign from before systems says which one it plays. This works once, and only for those campaigns. */
+function dm_campaign_set_ruleset(int $id): void
+{
+    require_dm();
+    $ruleset = post_str('ruleset', 10);
+    if (!isset(CAMPAIGN_RULESETS[$ruleset])) {
+        flash('Pick one of the systems in the list.', 'error');
+        redirect('/dm/campaigns');
+    }
+    try {
+        [$campaign, $copied] = transaction(function () use ($id, $ruleset) {
+            $campaign = q_one('SELECT * FROM campaigns WHERE id = ? AND owner_user_id = ?' . for_update(), [$id, owner_id()]);
+            if (!$campaign) {
+                throw new RuntimeException('No such campaign.');
+            }
+            if (!(int)$campaign['ruleset_open']) {
+                throw new RuntimeException("{$campaign['name']}’s system is already set, and can’t be changed.");
+            }
+            return [$campaign, settle_campaign_system($campaign, $ruleset)];
+        });
+    } catch (PDOException $e) {
+        throw $e; // a PDOException is a RuntimeException too, but it's a real error, not a message for the DM
+    } catch (RuntimeException $e) {
+        flash($e->getMessage(), 'error');
+        redirect('/dm/campaigns');
+    }
+    $label = ruleset_label($ruleset);
+    flash($ruleset === $campaign['ruleset']
+        ? "{$campaign['name']} plays {$label}, and that’s now fixed."
+        : "{$campaign['name']} now plays {$label}, and that’s now fixed. Its packs and stores moved to {$label} items, and {$copied} " . ($copied === 1 ? 'item was' : 'items were') . " copied into the {$label} catalog.");
     redirect('/dm/campaigns');
 }
 
@@ -70,6 +103,8 @@ function dm_campaign_delete(int $id): void
             q('DELETE FROM campaigns WHERE id = ?', [$id]);
             return $campaign;
         });
+    } catch (PDOException $e) {
+        throw $e;
     } catch (RuntimeException $e) {
         flash($e->getMessage(), 'error');
         redirect('/dm/campaigns');

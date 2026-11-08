@@ -46,6 +46,8 @@ const UPGRADES = [
     '003-admin'         => 'SELECT 1 FROM user_log LIMIT 1',
     '004-sign-in'       => 'SELECT 1 FROM login_attempts LIMIT 1',
     '005-item-tags'     => 'SELECT 1 FROM item_tags LIMIT 1',
+    '006-rulesets'      => 'SELECT ruleset FROM campaigns LIMIT 1',
+    '007-system-choice' => 'SELECT ruleset_open FROM campaigns LIMIT 1',
 ];
 
 /**
@@ -107,8 +109,8 @@ function apply_upgrades(PDO $pdo): void
 function already_applied(PDOException $e): bool
 {
     $code = (int)($e->errorInfo[1] ?? 0);
-    // MySQL/MariaDB: duplicate column, duplicate index name, duplicate foreign key name.
-    if (in_array($code, [1060, 1061, 1826], true)) {
+    // MySQL/MariaDB: duplicate column, duplicate index name, dropped index already gone, duplicate foreign key name.
+    if (in_array($code, [1060, 1061, 1091, 1826], true)) {
         return true;
     }
     // MariaDB reports a duplicate foreign key name as "Can't create table (errno: 121 ...)".
