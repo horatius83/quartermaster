@@ -19,8 +19,8 @@ foreach (categories() as $c) {
 }
 
 transaction(function () use ($cat) {
-    insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('admin', ?, 'admin', ?)", [password_hash('quartermaster', PASSWORD_DEFAULT), now()]);
-    $dm = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('dm', ?, 'dm', ?)", [password_hash('dungeon123', PASSWORD_DEFAULT), now()]);
+    insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('admin', ?, 'admin', ?)", [hash_password('quartermaster'), now()]);
+    $dm = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('dm', ?, 'dm', ?)", [hash_password('dungeon123'), now()]);
     $campaign = create_campaign('The Sunken Crown', $dm);
     $winter = create_campaign('Winter’s Teeth', $dm);
 
@@ -32,7 +32,7 @@ transaction(function () use ($cat) {
     ];
     $chars = [];
     foreach ($party as [$user, $name, $class, $coin, $cap]) {
-        $uid = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)", [$user, password_hash('adventure', PASSWORD_DEFAULT), now()]);
+        $uid = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'player', ?)", [$user, hash_password('adventure'), now()]);
         $chars[$user] = insert('INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [$campaign, $uid, $name, $class, $coin, $cap, now()]);
     }
 
@@ -96,7 +96,7 @@ transaction(function () use ($cat) {
     }
 
     // The second campaign shares the catalog but nothing else.
-    $uid = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('sela', ?, 'player', ?)", [password_hash('adventure', PASSWORD_DEFAULT), now()]);
+    $uid = insert("INSERT INTO users (username, password_hash, role, created_at) VALUES ('sela', ?, 'player', ?)", [hash_password('adventure'), now()]);
     $sela = insert('INSERT INTO characters (campaign_id, user_id, name, class_label, coin_cp, carry_capacity, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [$winter, $uid, 'Sela Morrow', 'Cleric 2', 4500, 150, now()]);
     $sid = insert('INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 1, ?)', [$winter, 'The Frostgate Market', 'General goods', 'Furs, rope and lamp oil. Prices rise with the snow.', now()]);
     foreach (['Hempen rope (50 ft)', 'Torch', 'Rations (1 day)', 'Healer’s kit'] as $itemName) {

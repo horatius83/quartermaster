@@ -180,7 +180,7 @@ test('player logins the DM adds and removes are logged too', async ({ page }) =>
 });
 
 test('a fresh install’s DM creates the admin account once', async ({ page }) => {
-  resetDatabase({ empty: true });
+  await resetDatabase({ empty: true });
   await page.goto('/setup');
   await page.getByLabel('DM username').fill('dm');
   await page.getByLabel('Password (8+ characters)').fill('dungeon123');

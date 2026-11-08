@@ -210,7 +210,7 @@ function create_login(string $username, string $password, string $role, string $
 {
     $id = insert(
         'INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)',
-        [$username, password_hash($password, PASSWORD_DEFAULT), $role, now()]
+        [$username, hash_password($password), $role, now()]
     );
     log_user('create', $id, $username, $role, $detail, current_user() ?? ['id' => $id, 'username' => $username]);
     return $id;
@@ -224,7 +224,7 @@ function create_login(string $username, string $password, string $role, string $
  */
 function set_password(array $user, string $password, string $detail): void
 {
-    q('UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?', [password_hash($password, PASSWORD_DEFAULT), $user['id']]);
+    q('UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?', [hash_password($password), $user['id']]);
     log_user('password', (int)$user['id'], $user['username'], $user['role'], $detail);
 }
 
