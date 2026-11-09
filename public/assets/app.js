@@ -158,11 +158,12 @@
     requestBrowse(p, 'browse');
   }
 
-  // Note what each search asked for, so a reply that no longer matches the input can be dropped.
+  // Which request a reply answers: a typed search, a browse (▾), or "more" of a browse.
   function suggestKind(evt) {
     var headers = evt.detail.requestConfig && evt.detail.requestConfig.headers;
     return (headers && headers['X-QM-Suggest']) || 'search';
   }
+  // Note what each request (search or browse) was sent with, so a reply that no longer fits can be dropped.
   document.addEventListener('htmx:beforeRequest', function (evt) {
     var p = suggestParts(evt.detail.elt);
     if (!p || (evt.detail.elt !== p.input && evt.detail.elt !== p.toggle)) return;
@@ -173,14 +174,12 @@
     var p = suggestParts(evt.detail.target);
     if (!p || evt.detail.target !== p.list || !evt.detail.shouldSwap) return;
     var kind = suggestKind(evt);
-    // Any reply is stale once the user has typed, picked or closed the list since asking (data-gen moved on).
-    var stale = evt.detail.xhr.qmGen !== p.list.dataset.gen || (kind === 'search'
-      // hx-sync only aborts a request once the next one is sent, 250 ms after typing stops, so a reply can land for
-      // older text. Nor should a search reply (even one sent after a pick) reopen the list over the pick, or
-      // replace a list being browsed.
-      ? evt.detail.xhr.qmSearched !== p.input.value || p.input.value === p.list.dataset.picked
-        || p.list.dataset.mode === 'browse'
-      : p.list.dataset.mode !== 'browse');
+    // Any reply is stale once the user has typed, browsed, picked or closed the list since asking: each of those
+    // moves data-gen on. (hx-sync only aborts a request once the next is sent, so replies do land late.) A search can
+    // also be sent after one of those, when its typing delay runs out: it mustn't replace a list being browsed (▾
+    // tapped straight after typing), or reopen the list over a pick.
+    var stale = evt.detail.xhr.qmGen !== p.list.dataset.gen
+      || (kind === 'search' && (p.list.dataset.mode === 'browse' || p.input.value === p.list.dataset.picked));
     if (stale) {
       evt.detail.shouldSwap = false;
     } else if (kind === 'more') {
@@ -222,7 +221,22 @@
 
   document.addEventListener('keydown', function (evt) {
     var p = suggestParts(evt.target);
-    if (!p || evt.target !== p.input) return;
+    if (!p) return;
+    if (evt.target === p.toggle) {
+      // Enter or Space activates ▾ (see the click handler), which then moves focus into the field.
+      if (evt.key === 'Enter' || evt.key === ' ') p.toggle.dataset.keyboard = '1';
+      // Escape closes from ▾ too; the arrow keys carry on in the field, where they move through the list.
+      if (evt.key === 'Escape' && !p.list.hidden) {
+        evt.preventDefault();
+        p.list.dataset.mode = '';
+        closeSuggestions(p);
+        return;
+      }
+      if ((evt.key === 'ArrowDown' || evt.key === 'ArrowUp') && !p.list.hidden) p.input.focus();
+      else return;
+    } else if (evt.target !== p.input) {
+      return;
+    }
     var count = suggestOptions(p).length;
     var active = parseInt(p.list.dataset.active || '-1', 10);
     if (evt.key === 'ArrowDown' || evt.key === 'ArrowUp') {
@@ -262,13 +276,17 @@
     var toggle = evt.target.closest('.suggest-toggle');
     var p = suggestParts(toggle);
     if (p) {
+      var fromKeyboard = toggle.dataset.keyboard;
+      delete toggle.dataset.keyboard;
       if (!p.list.hidden && p.list.dataset.mode === 'browse') {
         p.list.dataset.mode = '';
         closeSuggestions(p);
       } else {
         browseSuggestions(p);
         // From the keyboard (Enter or Space on ▾), carry on in the field, where the arrow keys move through the list.
-        if (evt.detail === 0) p.input.focus();
+        // Not for taps: a phone would put its keyboard up over the list. (A click's detail is 0 for a screen reader's
+        // double-tap as well as for keys, so the keydown handler marks keyboard use instead.)
+        if (fromKeyboard) p.input.focus();
       }
       return;
     }
@@ -278,6 +296,9 @@
   });
   // Close when the user moves on: a tap or click elsewhere, or tabbing out of the field and its button.
   document.addEventListener('pointerdown', function (evt) {
+    // A tap or click on ▾ isn't keyboard use, whatever keys were pressed on it before.
+    var toggle = evt.target.closest && evt.target.closest('.suggest-toggle');
+    if (toggle) delete toggle.dataset.keyboard;
     Array.prototype.forEach.call(document.querySelectorAll('.suggest'), function (box) {
       var p = suggestParts(box);
       if (p && !p.list.hidden && !box.contains(evt.target)) closeSuggestions(p);
@@ -306,8 +327,10 @@
 
   // A boosted link only swaps the page body, so after a deploy a tab left open would keep running the old app.js and
   // app.css against new markup. When the page fetched says its assets have changed, load it in full instead.
+  // Only pages fetched by GET: a form's reply was built from messages and kept input taken from the session, so
+  // fetching it again would lose them. Forms here answer with redirect(), which htmx follows as a full page load
+  // (HX-Redirect), so they pick up new assets anyway.
   document.addEventListener('htmx:beforeSwap', function (evt) {
-    // Only a page fetched by GET: reloading a form's reply would fetch it again by GET, losing its errors and input.
     if (!evt.detail.boosted || !evt.detail.shouldSwap || evt.detail.requestConfig.verb !== 'get') return;
     var mine = document.querySelector('meta[name="qm-assets"]');
     var theirs = /<meta name="qm-assets" content="([^"]*)"/.exec(evt.detail.serverResponse || '');

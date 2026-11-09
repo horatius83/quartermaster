@@ -291,3 +291,50 @@ test('a search reply that lands after Escape doesn’t reopen the list', async (
   await expect(suggestions(page)).toBeHidden();
   await expect(input).toBeFocused();
 });
+
+test('a form sent after a deploy still shows its error and keeps its input', async ({ page }) => {
+  await page.goto('/dm/party');
+  await page.evaluate(() => document.querySelector('meta[name="qm-assets"]')!.setAttribute('content', 'old'));
+  await page.getByLabel('Character name').fill('Ilse Varn');
+  await page.getByLabel('Player username').fill('ilse');
+  await page.getByLabel('Temporary password').evaluate((el) => el.removeAttribute('minlength'));
+  await page.getByLabel('Temporary password').fill('tiny1');
+  await page.getByRole('button', { name: 'Add to party' }).click();
+
+  // Neither the form's reply nor the page it redirects to is fetched a second time, which would use up the
+  // error and the kept input.
+  await expect(page.getByText('Player passwords need at least 6 characters.')).toBeVisible();
+  await expect(page.getByLabel('Character name')).toHaveValue('Ilse Varn');
+  await expect(page.getByLabel('Player username')).toHaveValue('ilse');
+});
+
+test('with focus on ▾, Escape closes the list and the arrow keys move through it', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
+  await input.pressSequentially('torc');
+  await expect(suggestions(page)).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(toggle).toBeFocused();
+  await expect(suggestions(page)).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(input).toBeFocused();
+  await expect(suggestions(page).getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('Tab');
+  await expect(toggle).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(suggestions(page)).toBeHidden();
+});
+
+test('a click on ▾ after a key press there still leaves the cursor out of the field', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
+  await toggle.focus();
+  await page.keyboard.down('Shift');
+  await page.keyboard.up('Shift');
+  // A key that doesn't activate the button, then a real click: browsing by pointer leaves focus alone.
+  await toggle.click();
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(itemInput(page)).not.toBeFocused();
+});
