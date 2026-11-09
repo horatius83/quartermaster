@@ -54,12 +54,14 @@ test('clearing the field drops the old suggestions', async ({ page }) => {
   await page.goto(`/dm/inventory/${BRYN}`);
   const input = itemInput(page);
   await input.pressSequentially('torc');
-  await expect(suggestions(page).getByRole('option')).not.toHaveCount(0);
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toBeVisible();
   await input.fill('');
   await expect(suggestions(page)).toBeHidden();
-  await input.press('ArrowDown');
-  await expect(suggestions(page)).toBeHidden();
   await expect(suggestions(page).getByRole('option')).toHaveCount(0);
+  // Down then browses the chosen category rather than bringing the old search back.
+  await input.press('ArrowDown');
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toHaveCount(0);
 });
 
 test('a reply that arrives after a pick doesn’t reopen the list', async ({ page }) => {
@@ -100,4 +102,287 @@ test('DM stocks a shelf by picking a suggestion', async ({ page }) => {
   await expect(form.getByRole('listbox')).toBeHidden();
   await form.getByRole('button', { name: 'Add to shelf' }).click();
   await expect(page.locator('#stock-body tr', { hasText: 'Torch' })).toHaveCount(1);
+});
+
+test('the ▾ button lists the chosen category A–Z, and Category switches it', async ({ openPage, browserName }) => {
+  test.skip(browserName === 'firefox', 'Firefox has no mobile emulation');
+  const page = await openPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await signInAsDm(page);
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  const list = suggestions(page);
+  const category = form.locator('select[name="category_id"]');
+  await expect(category).toHaveValue(await category.locator('option', { hasText: 'Weapon' }).getAttribute('value') ?? '');
+
+  await form.getByRole('button', { name: 'Browse the catalog by category' }).tap();
+  await expect(list).toBeVisible();
+  await expect(list).toContainText('Weapon, A–Z');
+  // The test config lists 4 at a time, and the demo has 8 weapons.
+  await expect(list.getByRole('option', { name: /Battleaxe/ })).toBeVisible();
+  await expect(list.getByRole('option', { name: /Longsword/ })).toHaveCount(0);
+  await list.getByRole('option', { name: 'Show more Weapon items' }).tap();
+  await expect(list.getByRole('option', { name: /Warhammer/ })).toBeVisible();
+  await expect(list.getByRole('option', { name: /Show more/ })).toHaveCount(0);
+  await expect(list).toBeVisible();
+  const names = await list.getByRole('option').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.value ?? ''));
+  expect(names).toEqual(['Battleaxe', 'Dagger', 'Light crossbow', 'Longbow', 'Longsword', 'Quarterstaff', 'Shortbow', 'Warhammer']);
+  // Browsing from a tap doesn't put the cursor in the field, so a phone keeps its keyboard down.
+  await expect(itemInput(page)).not.toBeFocused();
+
+  // Tapping Category closes the list (on a phone it covers the select); choosing one browses that instead.
+  await category.selectOption({ label: 'Armor' });
+  await expect(list).toContainText('Armor, A–Z');
+  // Exactly a batch's worth: no "Show more".
+  await expect(list.getByRole('option')).toHaveCount(4);
+  await expect(list.getByRole('option', { name: /Longsword/ })).toHaveCount(0);
+  await list.getByRole('option', { name: /Shield/ }).tap();
+  await expect(itemInput(page)).toHaveValue('Shield');
+  await expect(list).toBeHidden();
+});
+
+test('picking a browsed item sets its category, and ▾ closes the list again', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  const toggle = form.getByRole('button', { name: 'Browse the catalog by category' });
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Adventuring Gear' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await toggle.click();
+  await expect(suggestions(page)).toBeHidden();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  // Closed on purpose, so a later Category change leaves it closed.
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Armor' });
+  await page.waitForTimeout(300);
+  await expect(suggestions(page)).toBeHidden();
+
+  // Down on the empty field browses too.
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Weapon' });
+  await itemInput(page).focus();
+  await itemInput(page).press('ArrowDown');
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+
+  // Typing searches every category again.
+  await itemInput(page).pressSequentially('torc');
+  await expect(suggestions(page)).not.toContainText('A–Z');
+  await suggestions(page).getByRole('option', { name: /Torch/ }).click();
+  await expect(form.locator('select[name="category_id"]').locator('option:checked')).toHaveText('Adventuring Gear');
+});
+
+test('assets carry a version, so a deploy isn’t hidden by a cached app.js', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  await expect(page.locator('script[src*="app.js"]')).toHaveAttribute('src', /app\.js\?v=\d+$/);
+  await expect(page.locator('link[rel="stylesheet"][href*="app.css"]')).toHaveAttribute('href', /app\.css\?v=\d+$/);
+});
+
+test('▾ from the keyboard moves on into the field, where the arrow keys pick', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Armor' });
+  await form.getByRole('button', { name: 'Browse the catalog by category' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(suggestions(page)).toContainText('Armor, A–Z');
+  await expect(itemInput(page)).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(itemInput(page)).toHaveValue('Chain mail');
+
+  // Escape dismisses a browse list for good: changing Category doesn't bring it back.
+  await itemInput(page).fill('');
+  await itemInput(page).press('ArrowDown');
+  await expect(suggestions(page)).toBeVisible();
+  await itemInput(page).press('Escape');
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Weapon' });
+  await page.waitForTimeout(300);
+  await expect(suggestions(page)).toBeHidden();
+});
+
+test('browsing after the session ends goes to the sign-in page', async ({ page, context }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  await context.clearCookies();
+  await giveForm(page).getByRole('button', { name: 'Browse the catalog by category' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test('% and _ in a search are matched as they are, not as wildcards', async ({ page }) => {
+  for (const text of ['%', '_', 'Long_word', '!']) {
+    const reply = await page.request.get(`/dm/catalog/suggest?item=${encodeURIComponent(text)}`);
+    expect(await reply.text(), text).toBe('');
+  }
+  expect(await (await page.request.get('/dm/catalog/suggest?item=Longsword')).text()).toContain('Longsword');
+});
+
+test('a link followed after a deploy loads the page in full, with the new assets', async ({ page }) => {
+  // Links to pages that don't redirect: a redirect loads the page in full anyway.
+  await page.goto('/dm/carts');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  // Normally a link only swaps the body, so what this page set up is still there afterwards.
+  await page.evaluate(() => { (window as unknown as { qmMarker: number }).qmMarker = 1; });
+  await nav.getByRole('link', { name: 'Dashboard' }).click();
+  await expect(page).toHaveURL(/\/dm$/);
+  expect(await page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBe(1);
+
+  // Pretend this tab loaded older assets: the next link reloads in full.
+  await page.evaluate(() => document.querySelector('meta[name="qm-assets"]')!.setAttribute('content', 'old'));
+  await nav.getByRole('link', { name: 'Cart review' }).click();
+  await expect(page).toHaveURL(/\/dm\/carts$/);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
+  await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
+});
+
+test('"Show more" from the keyboard carries on at the first new item', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  await giveForm(page).locator('select[name="category_id"]').selectOption({ label: 'Weapon' });
+  await input.focus();
+  await input.press('ArrowDown');
+  const more = suggestions(page).getByRole('option', { name: 'Show more Weapon items' });
+  await expect(more).toBeVisible();
+  // The test config lists 4 at a time: Battleaxe, Dagger, Light crossbow, Longbow, then "Show more".
+  for (let i = 0; i < 5; i++) await input.press('ArrowDown');
+  await expect(more).toHaveAttribute('aria-selected', 'true');
+  await input.press('Enter');
+  const longsword = suggestions(page).getByRole('option', { name: /Longsword/ });
+  await expect(longsword).toHaveAttribute('aria-selected', 'true');
+  await expect(suggestions(page).getByRole('option')).toHaveCount(8);
+  await input.press('Enter');
+  await expect(input).toHaveValue('Longsword');
+});
+
+test('▾ tapped straight after typing still browses', async ({ page }) => {
+  // Hold the browse reply until the typed search has gone out, as on a slow connection.
+  let searched = () => {};
+  const searchSent = new Promise<void>((resolve) => { searched = resolve; });
+  page.on('request', (req) => { if (/suggest\?item=sw$/.test(req.url())) searched(); });
+  await page.route(/suggest\?browse=1/, async (route) => {
+    await searchSent;
+    await route.continue();
+  });
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Armor' });
+  // Inside the search's 250 ms typing delay, so that search fires after the browse request is sent.
+  await itemInput(page).pressSequentially('sw');
+  await form.getByRole('button', { name: 'Browse the catalog by category' }).click();
+  await expect(suggestions(page)).toContainText('Armor, A–Z');
+  await page.waitForTimeout(400);
+  await expect(suggestions(page)).toContainText('Armor, A–Z');
+});
+
+test('a search reply that lands after Escape doesn’t reopen the list', async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/dm\/catalog\/suggest\?item=torc$/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  await input.pressSequentially('tor');
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toBeVisible();
+  const slow = page.waitForRequest(/item=torc$/);
+  await input.press('c');
+  await slow;
+  await input.press('Escape');
+  await expect(suggestions(page)).toBeHidden();
+  const reply = page.waitForResponse(/item=torc$/);
+  release();
+  await reply;
+  await page.waitForTimeout(300);
+  await expect(suggestions(page)).toBeHidden();
+  await expect(input).toBeFocused();
+});
+
+test('a form sent after a deploy still shows its error and keeps its input', async ({ page }) => {
+  await page.goto('/dm/party');
+  await page.evaluate(() => document.querySelector('meta[name="qm-assets"]')!.setAttribute('content', 'old'));
+  await page.getByLabel('Character name').fill('Ilse Varn');
+  await page.getByLabel('Player username').fill('ilse');
+  await page.getByLabel('Temporary password').evaluate((el) => el.removeAttribute('minlength'));
+  await page.getByLabel('Temporary password').fill('tiny1');
+  await page.getByRole('button', { name: 'Add to party' }).click();
+
+  // Neither the form's reply nor the page it redirects to is fetched a second time, which would use up the
+  // error and the kept input.
+  await expect(page.getByText('Player passwords need at least 6 characters.')).toBeVisible();
+  await expect(page.getByLabel('Character name')).toHaveValue('Ilse Varn');
+  await expect(page.getByLabel('Player username')).toHaveValue('ilse');
+});
+
+test('with focus on ▾, Escape closes the list and the arrow keys move through it', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
+  await input.pressSequentially('torc');
+  await expect(suggestions(page)).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(toggle).toBeFocused();
+  await expect(suggestions(page)).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(input).toBeFocused();
+  await expect(suggestions(page).getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('Tab');
+  await expect(toggle).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(suggestions(page)).toBeHidden();
+});
+
+test('a key pressed on ▾ earlier doesn’t make a later click count as the keyboard', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
+  // Enter goes down on ▾ but nothing clicks it (as when a key is let go elsewhere), then a pointer click.
+  await toggle.dispatchEvent('keydown', { key: 'Enter', bubbles: true });
+  await toggle.click();
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(itemInput(page)).not.toBeFocused();
+  await toggle.click();
+  await expect(suggestions(page)).toBeHidden();
+
+  // The same with the key let go, then a click with no pointer first, as a screen reader's double-tap sends.
+  await toggle.dispatchEvent('keydown', { key: ' ', bubbles: true });
+  await toggle.dispatchEvent('keyup', { key: ' ', bubbles: true });
+  await page.waitForTimeout(50);
+  await toggle.dispatchEvent('click', { detail: 0 });
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(itemInput(page)).not.toBeFocused();
+});
+
+test('Down on ▾ with the list closed browses and moves into the field', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
+  await toggle.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(itemInput(page)).toBeFocused();
+});
+
+test('Escape inside the typing delay keeps the list closed', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  await input.pressSequentially('tor');
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toBeVisible();
+  // The search for "torc" is still waiting out its 250 ms when Escape closes the list.
+  const sent = page.waitForRequest(/item=torc$/);
+  await input.press('c');
+  await input.press('Escape');
+  await expect(suggestions(page)).toBeHidden();
+  await sent;
+  await page.waitForTimeout(500);
+  await expect(suggestions(page)).toBeHidden();
+  await expect(input).toBeFocused();
+});
+
+test('Back to a page htmx no longer has cached loads it in full when the assets changed', async ({ page }) => {
+  await page.goto('/dm/carts');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Dashboard' }).click();
+  await expect(page).toHaveURL(/\/dm$/);
+  await page.evaluate(() => {
+    localStorage.removeItem('htmx-history-cache');
+    document.querySelector('meta[name="qm-assets"]')!.setAttribute('content', 'old');
+    (window as unknown as { qmMarker: number }).qmMarker = 1;
+  });
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dm\/carts$/);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
+  await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
 });
