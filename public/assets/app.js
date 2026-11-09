@@ -77,9 +77,10 @@
 
   // Item-name suggestions (views/partials/item_suggest.php). Typing searches the catalog through htmx; the ▾ button
   // lists the category chosen in the form's Category field. This opens, closes and picks.
-  // The list's state lives on it: data-mode is "search" or "browse", data-picked the name just picked, and data-gen
-  // counts the user's moves so a browse reply that arrives after one of them is dropped. Browse requests go through
-  // htmx too (so a sign-in redirect or a server error is handled like any other), marked with an X-QM-Suggest header.
+  // The list's state lives on it: data-mode is "search" or "browse"; data-settled is text the user is done with (an
+  // item picked, or the list dismissed), which no search reply may reopen the list over; and data-gen counts the user's
+  // moves, so any reply that arrives after one of them is dropped. Browse requests go through htmx too (so a sign-in
+  // redirect or a server error is handled like any other), marked with an X-QM-Suggest header.
   function suggestParts(el) {
     var box = el && el.closest && el.closest('.suggest');
     if (!box) return null;
@@ -126,6 +127,13 @@
     suggestMoved(p);
     setSuggestOpen(p, false);
   }
+  // Closed on purpose (Escape, ▾ again, or a pick), unlike a tap elsewhere: changing Category doesn't bring it back,
+  // and nor does a search for this text that was still waiting out its typing delay.
+  function dismissSuggestions(p) {
+    p.list.dataset.mode = '';
+    p.list.dataset.settled = p.input.value;
+    closeSuggestions(p);
+  }
   function pickSuggestion(p, opt) {
     if (opt.dataset.more) {
       // "Show more" at the end of a long category: load the next batch under this one.
@@ -133,14 +141,11 @@
       return;
     }
     p.input.value = opt.dataset.value;
-    // Replies still on their way (or a delayed request yet to fire) mustn't reopen the list over the pick.
-    p.list.dataset.picked = p.input.value;
     // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
     var category = suggestCategory(p);
     var id = opt.dataset.categoryId;
     if (category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
-    p.list.dataset.mode = '';
-    closeSuggestions(p);
+    dismissSuggestions(p);
   }
   function requestBrowse(p, kind, offset) {
     var category = suggestCategory(p);
@@ -163,11 +168,10 @@
     var headers = evt.detail.requestConfig && evt.detail.requestConfig.headers;
     return (headers && headers['X-QM-Suggest']) || 'search';
   }
-  // Note what each request (search or browse) was sent with, so a reply that no longer fits can be dropped.
+  // Note how far along the user was when each request (search or browse) was sent, so a late reply can be dropped.
   document.addEventListener('htmx:beforeRequest', function (evt) {
     var p = suggestParts(evt.detail.elt);
     if (!p || (evt.detail.elt !== p.input && evt.detail.elt !== p.toggle)) return;
-    evt.detail.xhr.qmSearched = p.input.value;
     evt.detail.xhr.qmGen = p.list.dataset.gen;
   });
   document.addEventListener('htmx:beforeSwap', function (evt) {
@@ -177,9 +181,9 @@
     // Any reply is stale once the user has typed, browsed, picked or closed the list since asking: each of those
     // moves data-gen on. (hx-sync only aborts a request once the next is sent, so replies do land late.) A search can
     // also be sent after one of those, when its typing delay runs out: it mustn't replace a list being browsed (▾
-    // tapped straight after typing), or reopen the list over a pick.
+    // tapped straight after typing), or reopen the list over a pick or Escape.
     var stale = evt.detail.xhr.qmGen !== p.list.dataset.gen
-      || (kind === 'search' && (p.list.dataset.mode === 'browse' || p.input.value === p.list.dataset.picked));
+      || (kind === 'search' && (p.list.dataset.mode === 'browse' || p.input.value === p.list.dataset.settled));
     if (stale) {
       evt.detail.shouldSwap = false;
     } else if (kind === 'more') {
@@ -212,7 +216,7 @@
     // Typing always searches the whole catalog, even with a category being browsed.
     suggestMoved(p);
     p.list.dataset.mode = 'search';
-    delete p.list.dataset.picked;
+    delete p.list.dataset.settled;
     if (p.input.value === '') {
       p.list.innerHTML = '';
       setSuggestOpen(p, false);
@@ -223,13 +227,19 @@
     var p = suggestParts(evt.target);
     if (!p) return;
     if (evt.target === p.toggle) {
-      // Enter or Space activates ▾ (see the click handler), which then moves focus into the field.
+      // Enter or Space activates ▾ (see the click handler), which then moves focus into the field. The mark lasts
+      // only until the key comes up, so it can't make a later tap or a screen reader's double-tap look like a key.
       if (evt.key === 'Enter' || evt.key === ' ') p.toggle.dataset.keyboard = '1';
-      // Escape closes from ▾ too; the arrow keys carry on in the field, where they move through the list.
       if (evt.key === 'Escape' && !p.list.hidden) {
         evt.preventDefault();
-        p.list.dataset.mode = '';
-        closeSuggestions(p);
+        dismissSuggestions(p);
+        return;
+      }
+      // Down with the list closed opens it, like Enter; with it open, the arrow keys carry on in the field.
+      if (evt.key === 'ArrowDown' && p.list.hidden) {
+        evt.preventDefault();
+        browseSuggestions(p);
+        p.input.focus();
         return;
       }
       if ((evt.key === 'ArrowDown' || evt.key === 'ArrowUp') && !p.list.hidden) p.input.focus();
@@ -260,11 +270,16 @@
       pickSuggestion(p, suggestOptions(p)[active]);
     } else if (evt.key === 'Escape' && !p.list.hidden) {
       evt.preventDefault();
-      // Dismissed: changing Category afterwards shouldn't bring it back.
-      p.list.dataset.mode = '';
-      closeSuggestions(p);
+      dismissSuggestions(p);
     }
   });
+  // Space clicks on keyup, after this; Enter clicked on keydown, before it. Either way the click has had the mark.
+  function forgetKeyboard(evt) {
+    var toggle = evt.target.closest && evt.target.closest('.suggest-toggle');
+    if (toggle) setTimeout(function () { delete toggle.dataset.keyboard; }, 0);
+  }
+  document.addEventListener('keyup', forgetKeyboard);
+  document.addEventListener('focusout', forgetKeyboard);
 
   // Keep focus where it is while tapping or clicking the list or the ▾ button. If the input has focus it keeps it
   // (and a phone keeps its keyboard); if it hasn't, browsing doesn't pop the keyboard up.
@@ -279,8 +294,7 @@
       var fromKeyboard = toggle.dataset.keyboard;
       delete toggle.dataset.keyboard;
       if (!p.list.hidden && p.list.dataset.mode === 'browse') {
-        p.list.dataset.mode = '';
-        closeSuggestions(p);
+        dismissSuggestions(p);
       } else {
         browseSuggestions(p);
         // From the keyboard (Enter or Space on ▾), carry on in the field, where the arrow keys move through the list.
@@ -332,13 +346,21 @@
   // (HX-Redirect), so they pick up new assets anyway.
   document.addEventListener('htmx:beforeSwap', function (evt) {
     if (!evt.detail.boosted || !evt.detail.shouldSwap || evt.detail.requestConfig.verb !== 'get') return;
-    var mine = document.querySelector('meta[name="qm-assets"]');
-    var theirs = /<meta name="qm-assets" content="([^"]*)"/.exec(evt.detail.serverResponse || '');
-    if (mine && theirs && theirs[1] !== mine.getAttribute('content')) {
+    if (assetsChanged(evt.detail.serverResponse)) {
       evt.detail.shouldSwap = false;
       window.location.href = evt.detail.xhr.responseURL || evt.detail.pathInfo.requestPath;
     }
   });
+  // Back or Forward to a page htmx no longer has cached: it fetches the page itself and swaps it in without the event
+  // above. It can't be stopped here, but loading the address in full replaces it straight away.
+  document.addEventListener('htmx:historyCacheMissLoad', function (evt) {
+    if (assetsChanged(evt.detail.xhr.response)) window.location.replace(evt.detail.path);
+  });
+  function assetsChanged(html) {
+    var mine = document.querySelector('meta[name="qm-assets"]');
+    var theirs = /<meta name="qm-assets" content="([^"]*)"/.exec(html || '');
+    return !!(mine && theirs && theirs[1] !== mine.getAttribute('content'));
+  }
 
   // Network trouble: let the user know instead of failing silently.
   document.addEventListener('htmx:sendError', function () {

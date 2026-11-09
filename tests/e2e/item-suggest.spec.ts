@@ -327,14 +327,62 @@ test('with focus on ▾, Escape closes the list and the arrow keys move through 
   await expect(suggestions(page)).toBeHidden();
 });
 
-test('a click on ▾ after a key press there still leaves the cursor out of the field', async ({ page }) => {
+test('a key pressed on ▾ earlier doesn’t make a later click count as the keyboard', async ({ page }) => {
   await page.goto(`/dm/inventory/${BRYN}`);
   const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
-  await toggle.focus();
-  await page.keyboard.down('Shift');
-  await page.keyboard.up('Shift');
-  // A key that doesn't activate the button, then a real click: browsing by pointer leaves focus alone.
+  // Enter goes down on ▾ but nothing clicks it (as when a key is let go elsewhere), then a pointer click.
+  await toggle.dispatchEvent('keydown', { key: 'Enter', bubbles: true });
   await toggle.click();
   await expect(suggestions(page)).toContainText('Weapon, A–Z');
   await expect(itemInput(page)).not.toBeFocused();
+  await toggle.click();
+  await expect(suggestions(page)).toBeHidden();
+
+  // The same with the key let go, then a click with no pointer first, as a screen reader's double-tap sends.
+  await toggle.dispatchEvent('keydown', { key: ' ', bubbles: true });
+  await toggle.dispatchEvent('keyup', { key: ' ', bubbles: true });
+  await page.waitForTimeout(50);
+  await toggle.dispatchEvent('click', { detail: 0 });
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(itemInput(page)).not.toBeFocused();
+});
+
+test('Down on ▾ with the list closed browses and moves into the field', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const toggle = giveForm(page).getByRole('button', { name: 'Browse the catalog by category' });
+  await toggle.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(suggestions(page)).toContainText('Weapon, A–Z');
+  await expect(itemInput(page)).toBeFocused();
+});
+
+test('Escape inside the typing delay keeps the list closed', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  await input.pressSequentially('tor');
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toBeVisible();
+  // The search for "torc" is still waiting out its 250 ms when Escape closes the list.
+  const sent = page.waitForRequest(/item=torc$/);
+  await input.press('c');
+  await input.press('Escape');
+  await expect(suggestions(page)).toBeHidden();
+  await sent;
+  await page.waitForTimeout(500);
+  await expect(suggestions(page)).toBeHidden();
+  await expect(input).toBeFocused();
+});
+
+test('Back to a page htmx no longer has cached loads it in full when the assets changed', async ({ page }) => {
+  await page.goto('/dm/carts');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Dashboard' }).click();
+  await expect(page).toHaveURL(/\/dm$/);
+  await page.evaluate(() => {
+    localStorage.removeItem('htmx-history-cache');
+    document.querySelector('meta[name="qm-assets"]')!.setAttribute('content', 'old');
+    (window as unknown as { qmMarker: number }).qmMarker = 1;
+  });
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dm\/carts$/);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
+  await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
 });
