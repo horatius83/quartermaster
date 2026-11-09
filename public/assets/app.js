@@ -146,8 +146,10 @@
     var category = suggestCategory(p);
     var url = p.input.getAttribute('hx-get') + '?browse=1&category_id=' + encodeURIComponent(category ? category.value : '')
       + (offset ? '&offset=' + encodeURIComponent(offset) : '');
+    // Sent from ▾, not the field: requests from the field share its hx-sync, so a search still in its typing delay
+    // would fire and abort this one.
     htmx.ajax('GET', url, {
-      source: p.input, target: p.list, swap: kind === 'more' ? 'beforeend' : 'innerHTML', headers: { 'X-QM-Suggest': kind },
+      source: p.toggle, target: p.list, swap: kind === 'more' ? 'beforeend' : 'innerHTML', headers: { 'X-QM-Suggest': kind },
     });
   }
   function browseSuggestions(p) {
@@ -163,7 +165,7 @@
   }
   document.addEventListener('htmx:beforeRequest', function (evt) {
     var p = suggestParts(evt.detail.elt);
-    if (!p || evt.detail.elt !== p.input) return;
+    if (!p || (evt.detail.elt !== p.input && evt.detail.elt !== p.toggle)) return;
     evt.detail.xhr.qmSearched = p.input.value;
     evt.detail.xhr.qmGen = p.list.dataset.gen;
   });
@@ -171,13 +173,14 @@
     var p = suggestParts(evt.detail.target);
     if (!p || evt.detail.target !== p.list || !evt.detail.shouldSwap) return;
     var kind = suggestKind(evt);
-    var stale = kind === 'search'
+    // Any reply is stale once the user has typed, picked or closed the list since asking (data-gen moved on).
+    var stale = evt.detail.xhr.qmGen !== p.list.dataset.gen || (kind === 'search'
       // hx-sync only aborts a request once the next one is sent, 250 ms after typing stops, so a reply can land for
-      // older text. Nor should a search reply reopen the list over a pick, or replace a list being browsed.
+      // older text. Nor should a search reply (even one sent after a pick) reopen the list over the pick, or
+      // replace a list being browsed.
       ? evt.detail.xhr.qmSearched !== p.input.value || p.input.value === p.list.dataset.picked
         || p.list.dataset.mode === 'browse'
-      // The user typed, picked or closed the list since asking.
-      : evt.detail.xhr.qmGen !== p.list.dataset.gen || p.list.dataset.mode !== 'browse';
+      : p.list.dataset.mode !== 'browse');
     if (stale) {
       evt.detail.shouldSwap = false;
     } else if (kind === 'more') {
@@ -304,7 +307,8 @@
   // A boosted link only swaps the page body, so after a deploy a tab left open would keep running the old app.js and
   // app.css against new markup. When the page fetched says its assets have changed, load it in full instead.
   document.addEventListener('htmx:beforeSwap', function (evt) {
-    if (!evt.detail.boosted || !evt.detail.shouldSwap) return;
+    // Only a page fetched by GET: reloading a form's reply would fetch it again by GET, losing its errors and input.
+    if (!evt.detail.boosted || !evt.detail.shouldSwap || evt.detail.requestConfig.verb !== 'get') return;
     var mine = document.querySelector('meta[name="qm-assets"]');
     var theirs = /<meta name="qm-assets" content="([^"]*)"/.exec(evt.detail.serverResponse || '');
     if (mine && theirs && theirs[1] !== mine.getAttribute('content')) {

@@ -44,12 +44,6 @@ function asset(string $file): string
     return url('/assets/' . $file) . ($mtime ? '?v=' . $mtime : '');
 }
 
-/** Changes whenever a file the layout loads does. app.js reloads in full when it changes (see assets_version there). */
-function assets_version(): string
-{
-    return substr(md5(asset('app.css') . asset('htmx-2.0.4.min.js') . asset('app.js')), 0, 12);
-}
-
 /** A LIKE pattern (used with ESCAPE '!') matching text that contains $text, with its own % and _ taken literally. */
 function like_contains(string $text): string
 {

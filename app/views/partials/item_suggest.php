@@ -20,7 +20,7 @@ $hint ??= '';
            hx-get="<?= e(url('/dm/catalog/suggest')) ?>" hx-trigger="input changed delay:250ms"
            hx-sync="this:replace" hx-target="#<?= e($id) ?>-suggest" hx-swap="innerHTML">
     <button type="button" class="suggest-toggle" aria-label="Browse the catalog by category"
-            aria-controls="<?= e($id) ?>-suggest" aria-expanded="false">▾</button>
+            aria-controls="<?= e($id) ?>-suggest" aria-expanded="false" hx-sync="this:replace">▾</button>
   </div>
   <ul id="<?= e($id) ?>-suggest" class="suggest-list" role="listbox" aria-label="Catalog items" hidden></ul>
 </div>

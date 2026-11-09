@@ -283,8 +283,9 @@ function dm_catalog_suggest(): void
             . '</li>';
     }
     if ($more) {
-        echo '<li role="option" class="suggest-opt suggest-more" aria-selected="false" data-more="' . ($offset + $batch) . '">'
-            . 'Show more…</li>';
+        // An option so the arrow keys reach it; its label says what choosing it does, not that it's an item.
+        echo '<li role="option" class="suggest-opt suggest-more" aria-selected="false" data-more="' . ($offset + $batch) . '"'
+            . ' aria-label="' . e('Show more ' . $category['name'] . ' items') . '">Show more…</li>';
     }
     exit;
 }

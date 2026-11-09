@@ -2,6 +2,9 @@
 /** @var string $content @var string $title @var string $active */
 $user = current_user();
 $flashes = take_flashes();
+// The asset URLs carry their files' modified times, so a hash of them changes whenever one of the files does. The
+// qm-assets meta tag holds it, and app.js loads a page in full when a boosted link brings a different one.
+$assets = ['css' => asset('app.css'), 'htmx' => asset('htmx-2.0.4.min.js'), 'js' => asset('app.js')];
 $nav = function (string $key, string $href, string $label, string $extra = '') use ($active): string {
     $current = $key === $active ? ' aria-current="page"' : '';
     return '<a class="nav-link" href="' . e(url($href)) . '"' . $current . '>' . e($label) . $extra . '</a>';
@@ -11,11 +14,11 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="qm-assets" content="<?= e(assets_version()) ?>">
+<meta name="qm-assets" content="<?= e(substr(md5(implode(' ', $assets)), 0, 12)) ?>">
 <title><?= e($title) ?> · Quartermaster</title>
-<link rel="stylesheet" href="<?= e(asset('app.css')) ?>">
-<script src="<?= e(asset('htmx-2.0.4.min.js')) ?>"></script>
-<script src="<?= e(asset('app.js')) ?>" defer></script>
+<link rel="stylesheet" href="<?= e($assets['css']) ?>">
+<script src="<?= e($assets['htmx']) ?>"></script>
+<script src="<?= e($assets['js']) ?>" defer></script>
 </head>
 <body hx-boost="true" hx-headers='{"X-CSRF-Token": "<?= e(csrf_token()) ?>"}'>
 <?php if ($user && $user['role'] === 'dm'): ?>

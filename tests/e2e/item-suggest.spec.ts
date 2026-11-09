@@ -120,9 +120,9 @@ test('the ▾ button lists the chosen category A–Z, and Category switches it',
   // The test config lists 4 at a time, and the demo has 8 weapons.
   await expect(list.getByRole('option', { name: /Battleaxe/ })).toBeVisible();
   await expect(list.getByRole('option', { name: /Longsword/ })).toHaveCount(0);
-  await list.getByRole('option', { name: 'Show more…' }).tap();
+  await list.getByRole('option', { name: 'Show more Weapon items' }).tap();
   await expect(list.getByRole('option', { name: /Warhammer/ })).toBeVisible();
-  await expect(list.getByRole('option', { name: 'Show more…' })).toHaveCount(0);
+  await expect(list.getByRole('option', { name: /Show more/ })).toHaveCount(0);
   await expect(list).toBeVisible();
   const names = await list.getByRole('option').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.value ?? ''));
   expect(names).toEqual(['Battleaxe', 'Dagger', 'Light crossbow', 'Longbow', 'Longsword', 'Quarterstaff', 'Shortbow', 'Warhammer']);
@@ -227,4 +227,67 @@ test('a link followed after a deploy loads the page in full, with the new assets
   await expect(page).toHaveURL(/\/dm\/carts$/);
   await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
   await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
+});
+
+test('"Show more" from the keyboard carries on at the first new item', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  await giveForm(page).locator('select[name="category_id"]').selectOption({ label: 'Weapon' });
+  await input.focus();
+  await input.press('ArrowDown');
+  const more = suggestions(page).getByRole('option', { name: 'Show more Weapon items' });
+  await expect(more).toBeVisible();
+  // The test config lists 4 at a time: Battleaxe, Dagger, Light crossbow, Longbow, then "Show more".
+  for (let i = 0; i < 5; i++) await input.press('ArrowDown');
+  await expect(more).toHaveAttribute('aria-selected', 'true');
+  await input.press('Enter');
+  const longsword = suggestions(page).getByRole('option', { name: /Longsword/ });
+  await expect(longsword).toHaveAttribute('aria-selected', 'true');
+  await expect(suggestions(page).getByRole('option')).toHaveCount(8);
+  await input.press('Enter');
+  await expect(input).toHaveValue('Longsword');
+});
+
+test('▾ tapped straight after typing still browses', async ({ page }) => {
+  // Hold the browse reply until the typed search has gone out, as on a slow connection.
+  let searched = () => {};
+  const searchSent = new Promise<void>((resolve) => { searched = resolve; });
+  page.on('request', (req) => { if (/suggest\?item=sw$/.test(req.url())) searched(); });
+  await page.route(/suggest\?browse=1/, async (route) => {
+    await searchSent;
+    await route.continue();
+  });
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  await form.locator('select[name="category_id"]').selectOption({ label: 'Armor' });
+  // Inside the search's 250 ms typing delay, so that search fires after the browse request is sent.
+  await itemInput(page).pressSequentially('sw');
+  await form.getByRole('button', { name: 'Browse the catalog by category' }).click();
+  await expect(suggestions(page)).toContainText('Armor, A–Z');
+  await page.waitForTimeout(400);
+  await expect(suggestions(page)).toContainText('Armor, A–Z');
+});
+
+test('a search reply that lands after Escape doesn’t reopen the list', async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/dm\/catalog\/suggest\?item=torc$/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const input = itemInput(page);
+  await input.pressSequentially('tor');
+  await expect(suggestions(page).getByRole('option', { name: /Torch/ })).toBeVisible();
+  const slow = page.waitForRequest(/item=torc$/);
+  await input.press('c');
+  await slow;
+  await input.press('Escape');
+  await expect(suggestions(page)).toBeHidden();
+  const reply = page.waitForResponse(/item=torc$/);
+  release();
+  await reply;
+  await page.waitForTimeout(300);
+  await expect(suggestions(page)).toBeHidden();
+  await expect(input).toBeFocused();
 });
