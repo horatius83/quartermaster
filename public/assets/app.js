@@ -78,7 +78,8 @@
   // Item-name suggestions (views/partials/item_suggest.php). Typing searches the catalog through htmx; the ▾ button
   // lists the category chosen in the form's Category field. This opens, closes and picks.
   // The list's state lives on it: data-mode is "search" or "browse", data-picked the name just picked, and data-gen
-  // counts the user's moves so a browse reply that arrives after one of them is dropped.
+  // counts the user's moves so a browse reply that arrives after one of them is dropped. Browse requests go through
+  // htmx too (so a sign-in redirect or a server error is handled like any other), marked with an X-QM-Suggest header.
   function suggestParts(el) {
     var box = el && el.closest && el.closest('.suggest');
     if (!box) return null;
@@ -116,7 +117,6 @@
     if (!open) setSuggestActive(p, -1);
   }
   function numberSuggestions(p) {
-    p.list.scrollTop = 0;
     Array.prototype.forEach.call(suggestOptions(p), function (o, i) { o.id = p.list.id + '-' + i; });
   }
   function suggestMoved(p) {
@@ -127,6 +127,11 @@
     setSuggestOpen(p, false);
   }
   function pickSuggestion(p, opt) {
+    if (opt.dataset.more) {
+      // "Show more" at the end of a long category: load the next batch under this one.
+      requestBrowse(p, 'more', opt.dataset.more);
+      return;
+    }
     p.input.value = opt.dataset.value;
     // Replies still on their way (or a delayed request yet to fire) mustn't reopen the list over the pick.
     p.list.dataset.picked = p.input.value;
@@ -137,49 +142,66 @@
     p.list.dataset.mode = '';
     closeSuggestions(p);
   }
-  function browseSuggestions(p) {
+  function requestBrowse(p, kind, offset) {
     var category = suggestCategory(p);
+    var url = p.input.getAttribute('hx-get') + '?browse=1&category_id=' + encodeURIComponent(category ? category.value : '')
+      + (offset ? '&offset=' + encodeURIComponent(offset) : '');
+    htmx.ajax('GET', url, {
+      source: p.input, target: p.list, swap: kind === 'more' ? 'beforeend' : 'innerHTML', headers: { 'X-QM-Suggest': kind },
+    });
+  }
+  function browseSuggestions(p) {
     suggestMoved(p);
-    var gen = p.list.dataset.gen;
     p.list.dataset.mode = 'browse';
-    var url = p.toggle.dataset.url + '?browse=1&category_id=' + encodeURIComponent(category ? category.value : '');
-    fetch(url, { credentials: 'same-origin', headers: { 'HX-Request': 'true' } })
-      .then(function (res) {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.text();
-      })
-      .then(function (html) {
-        if (p.list.dataset.gen !== gen || !document.body.contains(p.list)) return;
-        p.list.innerHTML = html;
-        numberSuggestions(p);
-        setSuggestOpen(p, true);
-      })
-      .catch(function () {
-        showToast('Could not load the catalog. Try again.', 'error');
-      });
+    requestBrowse(p, 'browse');
   }
 
   // Note what each search asked for, so a reply that no longer matches the input can be dropped.
+  function suggestKind(evt) {
+    var headers = evt.detail.requestConfig && evt.detail.requestConfig.headers;
+    return (headers && headers['X-QM-Suggest']) || 'search';
+  }
   document.addEventListener('htmx:beforeRequest', function (evt) {
     var p = suggestParts(evt.detail.elt);
-    if (p && evt.detail.elt === p.input) evt.detail.xhr.qmSearched = p.input.value;
+    if (!p || evt.detail.elt !== p.input) return;
+    evt.detail.xhr.qmSearched = p.input.value;
+    evt.detail.xhr.qmGen = p.list.dataset.gen;
   });
   document.addEventListener('htmx:beforeSwap', function (evt) {
     var p = suggestParts(evt.detail.target);
-    if (!p || evt.detail.target !== p.list) return;
-    // hx-sync only aborts a request once the next one is sent, 250 ms after typing stops, so a reply can land for
-    // older text. Nor should a search reply reopen the list over a pick, or replace a list being browsed.
-    if (evt.detail.xhr.qmSearched !== p.input.value || p.input.value === p.list.dataset.picked
-        || p.list.dataset.mode === 'browse') {
+    if (!p || evt.detail.target !== p.list || !evt.detail.shouldSwap) return;
+    var kind = suggestKind(evt);
+    var stale = kind === 'search'
+      // hx-sync only aborts a request once the next one is sent, 250 ms after typing stops, so a reply can land for
+      // older text. Nor should a search reply reopen the list over a pick, or replace a list being browsed.
+      ? evt.detail.xhr.qmSearched !== p.input.value || p.input.value === p.list.dataset.picked
+        || p.list.dataset.mode === 'browse'
+      // The user typed, picked or closed the list since asking.
+      : evt.detail.xhr.qmGen !== p.list.dataset.gen || p.list.dataset.mode !== 'browse';
+    if (stale) {
       evt.detail.shouldSwap = false;
+    } else if (kind === 'more') {
+      var more = p.list.querySelector('[data-more]');
+      evt.detail.xhr.qmFirstNew = suggestOptions(p).length - (more ? 1 : 0);
+      if (more) more.remove();
     }
   });
   document.addEventListener('htmx:afterSwap', function (evt) {
     var p = suggestParts(evt.detail.target);
     if (!p || evt.detail.target !== p.list) return;
+    var kind = suggestKind(evt);
     numberSuggestions(p);
-    // Don't pop open if the user has already moved on (e.g. tapped another field before the reply came).
-    setSuggestOpen(p, suggestOptions(p).length > 0 && p.input.value !== '' && document.activeElement === p.input);
+    if (kind === 'search') {
+      p.list.scrollTop = 0;
+      // Don't pop open if the user has already moved on (e.g. tapped another field before the reply came).
+      setSuggestOpen(p, suggestOptions(p).length > 0 && p.input.value !== '' && document.activeElement === p.input);
+    } else if (kind === 'browse') {
+      p.list.scrollTop = 0;
+      setSuggestOpen(p, true);
+    } else if (parseInt(p.list.dataset.active || '-1', 10) >= 0) {
+      // Chosen from the keyboard: carry on from the first of the new items.
+      setSuggestActive(p, evt.detail.xhr.qmFirstNew);
+    }
   });
 
   document.addEventListener('input', function (evt) {
@@ -201,14 +223,14 @@
     var count = suggestOptions(p).length;
     var active = parseInt(p.list.dataset.active || '-1', 10);
     if (evt.key === 'ArrowDown' || evt.key === 'ArrowUp') {
-      if (!count) {
-        // Nothing to move through yet: down on an empty field browses, like the ▾ button.
-        if (evt.key === 'ArrowDown' && p.input.value === '' && p.toggle) {
-          evt.preventDefault();
-          browseSuggestions(p);
-        }
+      // Down on an empty field with the list closed browses, like the ▾ button. (Whatever the closed list still
+      // holds may be another category's.)
+      if (evt.key === 'ArrowDown' && p.list.hidden && p.input.value === '' && p.toggle) {
+        evt.preventDefault();
+        browseSuggestions(p);
         return;
       }
+      if (!count) return;
       evt.preventDefault();
       if (p.list.hidden) setSuggestOpen(p, true);
       // Cycle through the options and back to the typed text (-1).
@@ -221,6 +243,8 @@
       pickSuggestion(p, suggestOptions(p)[active]);
     } else if (evt.key === 'Escape' && !p.list.hidden) {
       evt.preventDefault();
+      // Dismissed: changing Category afterwards shouldn't bring it back.
+      p.list.dataset.mode = '';
       closeSuggestions(p);
     }
   });
@@ -235,8 +259,14 @@
     var toggle = evt.target.closest('.suggest-toggle');
     var p = suggestParts(toggle);
     if (p) {
-      if (!p.list.hidden && p.list.dataset.mode === 'browse') closeSuggestions(p);
-      else browseSuggestions(p);
+      if (!p.list.hidden && p.list.dataset.mode === 'browse') {
+        p.list.dataset.mode = '';
+        closeSuggestions(p);
+      } else {
+        browseSuggestions(p);
+        // From the keyboard (Enter or Space on ▾), carry on in the field, where the arrow keys move through the list.
+        if (evt.detail === 0) p.input.focus();
+      }
       return;
     }
     var opt = evt.target.closest('.suggest-list [role="option"]');
@@ -254,7 +284,8 @@
     var p = suggestParts(evt.target);
     if (p && !p.list.hidden && evt.relatedTarget && !p.box.contains(evt.relatedTarget)) closeSuggestions(p);
   });
-  // Changing Category while browsing (the list closes when the select is tapped) shows the new category.
+  // Changing Category while browsing shows the new category. The list closes when the select is tapped (and on a
+  // phone it covers the select), so this counts a list closed by a tap elsewhere, but not one dismissed with ▾ or Escape.
   document.addEventListener('change', function (evt) {
     if (!evt.target.matches || !evt.target.matches('select[name="category_id"]') || !evt.target.form) return;
     var p = suggestParts(evt.target.form.querySelector('.suggest'));
@@ -268,6 +299,18 @@
       p.list.dataset.mode = '';
       closeSuggestions(p);
     });
+  });
+
+  // A boosted link only swaps the page body, so after a deploy a tab left open would keep running the old app.js and
+  // app.css against new markup. When the page fetched says its assets have changed, load it in full instead.
+  document.addEventListener('htmx:beforeSwap', function (evt) {
+    if (!evt.detail.boosted || !evt.detail.shouldSwap) return;
+    var mine = document.querySelector('meta[name="qm-assets"]');
+    var theirs = /<meta name="qm-assets" content="([^"]*)"/.exec(evt.detail.serverResponse || '');
+    if (mine && theirs && theirs[1] !== mine.getAttribute('content')) {
+      evt.detail.shouldSwap = false;
+      window.location.href = evt.detail.xhr.responseURL || evt.detail.pathInfo.requestPath;
+    }
   });
 
   // Network trouble: let the user know instead of failing silently.

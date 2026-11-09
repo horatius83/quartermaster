@@ -19,8 +19,8 @@ function catalog_query(string $search, string $cat, array $tags, ?int $id = null
     $sql = ' FROM items i JOIN categories cat ON cat.id = i.category_id WHERE i.ruleset = ?';
     $params = [campaign_ruleset()];
     if ($search !== '') {
-        $sql .= ' AND i.name LIKE ?';
-        $params[] = '%' . $search . '%';
+        $sql .= " AND i.name LIKE ? ESCAPE '!'";
+        $params[] = like_contains($search);
     }
     if ($cat !== '') {
         $sql .= ' AND cat.slug = ?';
@@ -231,13 +231,19 @@ function dm_catalog_delete(int $id): void
     catalog_redraw();
 }
 
-/** Most items one browse lists. A category bigger than this says so, and typing narrows it. */
-const SUGGEST_BROWSE_MAX = 300;
+/**
+ * Most items one browse request lists. A bigger category ends with a "Show more" row that loads the next batch.
+ * The 'suggest_browse_max' config setting changes it (the tests set it low to reach that row).
+ */
+function suggest_browse_max(): int
+{
+    return max(1, (int)config('suggest_browse_max', 300));
+}
 
 /**
  * Options for the item-name suggestion list on the give / stock forms (views/partials/item_suggest.php).
  * ?item=… searches every category for a name containing the text (the first 12, A–Z).
- * ?browse=1&category_id=… lists that whole category A–Z instead, for the ▾ button.
+ * ?browse=1&category_id=… lists that category A–Z instead, for the ▾ button, suggest_browse_max() at a time from &offset=….
  */
 function dm_catalog_suggest(): void
 {
@@ -249,22 +255,25 @@ function dm_catalog_suggest(): void
         if (!$category) {
             exit;
         }
+        $offset = max(0, (int)get_str('offset', 9));
+        $batch = suggest_browse_max();
         $rows = q_all(
-            $select . ' WHERE i.category_id = ? AND i.ruleset = ? ORDER BY i.name LIMIT ' . (SUGGEST_BROWSE_MAX + 1),
+            $select . ' WHERE i.category_id = ? AND i.ruleset = ? ORDER BY i.name, i.id LIMIT ' . ($batch + 1) . ' OFFSET ' . $offset,
             [(int)$category['id'], campaign_ruleset()]
         );
-        $more = count($rows) > SUGGEST_BROWSE_MAX;
-        $rows = array_slice($rows, 0, SUGGEST_BROWSE_MAX);
-        $head = $rows
-            ? $category['name'] . ', A–Z' . ($more ? ' (the first ' . SUGGEST_BROWSE_MAX . ')' : '')
-            : 'No ' . $category['name'] . ' items in the catalog yet.';
-        echo '<li class="suggest-head" role="presentation">' . e($head)
-            . ' <span class="suggest-hint">Change Category to browse another.</span></li>';
+        $more = count($rows) > $batch;
+        $rows = array_slice($rows, 0, $batch);
+        if ($offset === 0) {
+            $head = $rows ? $category['name'] . ', A–Z' : 'No ' . $category['name'] . ' items in the catalog yet.';
+            echo '<li class="suggest-head" role="presentation">' . e($head)
+                . ' <span class="suggest-hint">Change Category to browse another.</span></li>';
+        }
     } else {
         $search = get_str('item', 150);
         $rows = $search === ''
             ? []
-            : q_all($select . ' WHERE i.name LIKE ? AND i.ruleset = ? ORDER BY i.name LIMIT 12', ['%' . $search . '%', campaign_ruleset()]);
+            : q_all($select . " WHERE i.name LIKE ? ESCAPE '!' AND i.ruleset = ? ORDER BY i.name LIMIT 12", [like_contains($search), campaign_ruleset()]);
+        $more = false;
     }
     foreach ($rows as $r) {
         echo '<li role="option" class="suggest-opt" aria-selected="false" data-value="' . e($r['name']) . '"'
@@ -272,6 +281,10 @@ function dm_catalog_suggest(): void
             . '<span class="suggest-name">' . e($r['name']) . '</span>'
             . '<span class="suggest-meta">' . e($r['category'] . ' · ' . coins((int)$r['price_cp']) . ' · ' . fmt_weight($r['weight'])) . '</span>'
             . '</li>';
+    }
+    if ($more) {
+        echo '<li role="option" class="suggest-opt suggest-more" aria-selected="false" data-more="' . ($offset + $batch) . '">'
+            . 'Show more…</li>';
     }
     exit;
 }

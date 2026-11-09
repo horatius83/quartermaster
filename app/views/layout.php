@@ -11,6 +11,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="qm-assets" content="<?= e(assets_version()) ?>">
 <title><?= e($title) ?> · Quartermaster</title>
 <link rel="stylesheet" href="<?= e(asset('app.css')) ?>">
 <script src="<?= e(asset('htmx-2.0.4.min.js')) ?>"></script>
