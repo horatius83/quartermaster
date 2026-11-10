@@ -4,6 +4,8 @@ Options -Indexes
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteCond %{REQUEST_URI} !/public/
+    # Only a path that starts with public/ is left alone. Matching "/public/" anywhere in the address would
+    # also let through /scripts/seed-demo.php/public/, which runs a script outside public/.
+    RewriteRule ^public/ - [L]
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>

@@ -121,6 +121,57 @@ test('a name paused from one address can still sign in from another', async ({ o
   await expect(home).toHaveURL(/\/dm$/);
 });
 
+test('IPv6 addresses in one /64 count as one address', async ({ openPage }) => {
+  // One connection can use any address in its /64, so a new one mustn't buy five more guesses.
+  for (let i = 1; i <= 5; i++) {
+    const guesser = await pageFrom(openPage, `2001:db8:1:2::${i}`);
+    await tryToSignIn(guesser, DM.username, `wrong-${i}`);
+  }
+  const sameBlock = await pageFrom(openPage, '2001:db8:1:2:aaaa:bbbb:cccc:dddd');
+  await tryToSignIn(sameBlock, DM.username, DM.password);
+  await expect(sameBlock.getByRole('alert')).toContainText('Too many wrong passwords');
+
+  const nextBlock = await pageFrom(openPage, '2001:db8:1:3::1');
+  await signInAsDm(nextBlock);
+  await expect(nextBlock).toHaveURL(/\/dm$/);
+  // The account log names the /64 that's paused.
+  const admin = await pageFrom(openPage, '203.0.113.20');
+  await signInAsAdmin(admin);
+  await admin.goto('/admin/log');
+  await expect(admin.locator('table.ledger tbody tr').first()).toContainText('from 2001:db8:1:2::/64');
+});
+
+test('guesses for one name from many addresses pause the name everywhere, but not a session', async ({ openPage }) => {
+  test.slow(); // fifty sign-in tries
+  const dm = await pageFrom(openPage, '203.0.113.30');
+  await signInAsDm(dm);
+
+  // Four tries from each address stay under its own limit; the 50th try reaches the name's.
+  // One browser stands in for all the addresses: opening a new one for each is slow.
+  const guesser = await openPage();
+  let tries = 0;
+  for (let host = 100; tries < 50; host++) {
+    await guesser.setExtraHTTPHeaders({ 'X-Test-Client-IP': `198.51.100.${host}` });
+    for (let i = 1; i <= 4 && tries < 50; i++, tries++) {
+      await tryToSignIn(guesser, DM.username, `wrong-${host}-${i}`);
+    }
+  }
+
+  // An address that has never guessed waits too, even with the right password.
+  const home = await pageFrom(openPage, '203.0.113.31');
+  await tryToSignIn(home, DM.username, DM.password);
+  await expect(home.getByRole('alert')).toContainText('Too many wrong passwords');
+  // Other names aren't paused, and the DM's own session carries on.
+  await signInAsAdmin(home);
+  await home.goto('/admin/log');
+  const first = home.locator('table.ledger tbody tr').first();
+  await expect(first).toContainText('50 wrong passwords from 13 addresses');
+  await expect(first).toContainText('sign-in paused everywhere');
+
+  await changeOwnPassword(dm, DM.password, 'dragon-hoard');
+  await expect(toasts(dm)).toContainText('Password changed.');
+});
+
 test('guesses spread over many names pause the address, and it is logged', async ({ openPage }) => {
   const sprayer = await pageFrom(openPage, '203.0.113.7');
   // One "name" is a password typed into the wrong box, which must never be written down.

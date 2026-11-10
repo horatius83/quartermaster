@@ -134,9 +134,16 @@ function require_admin(): array
 // SIGN_IN_TRIES_PER_NAME times from one address, and an address can make SIGN_IN_TRIES_PER_ADDRESS wrong
 // tries in all, per SIGN_IN_WINDOW. Counting a name per address means a stranger can't lock a DM out of
 // signing in from home just by guessing their name somewhere else.
+//
+// "Address" here is address_block(): an IPv6 connection is handed a whole /64, so its addresses count as one.
+// A guesser with many unrelated addresses still gets a few tries from each, so a name also has a limit
+// across all of them, SIGN_IN_TRIES_PER_NAME_ANYWHERE. That one does pause the name for everybody, which is
+// why it's set high: it takes a stranger ten addresses to reach it, and it holds them to that many guesses
+// per window however many addresses they have.
 const SIGN_IN_WINDOW = 15 * 60;
 const SIGN_IN_TRIES_PER_NAME = 5;
 const SIGN_IN_TRIES_PER_ADDRESS = 20;
+const SIGN_IN_TRIES_PER_NAME_ANYWHERE = 50;
 
 /**
  * The visitor's address. Behind a proxy or CDN, REMOTE_ADDR is the proxy's, shared by every visitor,
@@ -157,6 +164,23 @@ function client_address(): string
     return substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
 }
 
+/**
+ * What wrong passwords are counted against for $address: itself for IPv4, its /64 for IPv6 (written like
+ * "2001:db8:1:2::/64"), since one IPv6 connection can use any address in its /64. An IPv4 address written
+ * as IPv6 (::ffff:203.0.113.5) counts as the IPv4 one. Anything else is returned as it is.
+ */
+function address_block(string $address): string
+{
+    $packed = @inet_pton($address);
+    if ($packed === false || strlen($packed) !== 16) {
+        return $address;
+    }
+    if (str_starts_with($packed, str_repeat("\0", 10) . "\xff\xff")) {
+        return inet_ntop(substr($packed, 12));
+    }
+    return inet_ntop(substr($packed, 0, 8) . str_repeat("\0", 8)) . '/64';
+}
+
 function wrong_password_pause_message(): string
 {
     return 'Too many wrong passwords. Wait ' . intdiv(SIGN_IN_WINDOW, 60) . ' minutes and try again.';
@@ -166,22 +190,26 @@ function wrong_password_pause_message(): string
  * Check $password for the login $user (the row with password_hash, or null when no login has the name
  * $username), counting wrong ones against the limits. 'blocked' means this address has to wait; it's
  * checked first, so more tries tell a guesser nothing. $addressLimit false applies only the per-name
- * limit, for someone already signed in: other people's mistakes at a shared address shouldn't pause them.
+ * limit at this address, for someone already signed in: other people's mistakes, at a shared address or
+ * anywhere else, shouldn't pause them or sign them out.
  * $where says where the password was typed, for the account log.
  * @return 'ok'|'wrong'|'blocked'
  */
 function check_password(string $username, ?array $user, string $password, string $where, bool $addressLimit = true): string
 {
-    $address = client_address();
+    $address = address_block(client_address());
+    $since = gmdate('Y-m-d H:i:s', time() - SIGN_IN_WINDOW);
     $tries = q_one(
         'SELECT COUNT(*) AS address_tries, COALESCE(SUM(CASE WHEN username = ? THEN 1 ELSE 0 END), 0) AS name_tries
            FROM login_attempts WHERE ip = ? AND created_at > ?',
-        [$username, $address, gmdate('Y-m-d H:i:s', time() - SIGN_IN_WINDOW)]
+        [$username, $address, $since]
     );
     $nameTries = (int)$tries['name_tries'];
     $addressTries = (int)$tries['address_tries'];
-    $blocked = fn(int $name, int $all) => $name >= SIGN_IN_TRIES_PER_NAME || ($addressLimit && $all >= SIGN_IN_TRIES_PER_ADDRESS);
-    if ($blocked($nameTries, $addressTries)) {
+    $anywhereTries = (int)q_val('SELECT COUNT(*) FROM login_attempts WHERE username = ? AND created_at > ?', [$username, $since]);
+    $blocked = fn(int $name, int $all, int $anywhere) => $name >= SIGN_IN_TRIES_PER_NAME
+        || ($addressLimit && ($all >= SIGN_IN_TRIES_PER_ADDRESS || $anywhere >= SIGN_IN_TRIES_PER_NAME_ANYWHERE));
+    if ($blocked($nameTries, $addressTries, $anywhereTries)) {
         return 'blocked';
     }
 
@@ -204,6 +232,12 @@ function check_password(string $username, ?array $user, string $password, string
     if ($nameTries + 1 === SIGN_IN_TRIES_PER_NAME && $user) {
         log_user('lockout', (int)$user['id'], $user['username'], $user['role'], "Too many wrong passwords {$where} {$from}");
     }
+    if ($anywhereTries + 1 === SIGN_IN_TRIES_PER_NAME_ANYWHERE && $user) {
+        $addresses = (int)q_val('SELECT COUNT(DISTINCT ip) FROM login_attempts WHERE username = ?', [$username]);
+        log_user('lockout', (int)$user['id'], $user['username'], $user['role'],
+            SIGN_IN_TRIES_PER_NAME_ANYWHERE . " wrong passwords from {$addresses} " . ($addresses === 1 ? 'address' : 'addresses')
+            . '; sign-in paused everywhere for ' . intdiv(SIGN_IN_WINDOW, 60) . ' minutes');
+    }
     if ($addressTries + 1 === SIGN_IN_TRIES_PER_ADDRESS) {
         // Only names that are real logins are written down. Anything else may be a password typed into the
         // username box by mistake, so it's only counted.
@@ -218,7 +252,7 @@ function check_password(string $username, ?array $user, string $password, string
         }
         log_user('lockout', null, '', '', SIGN_IN_TRIES_PER_ADDRESS . " wrong passwords {$from}, {$for}");
     }
-    return $blocked($nameTries + 1, $addressTries + 1) ? 'blocked' : 'wrong';
+    return $blocked($nameTries + 1, $addressTries + 1, $anywhereTries + 1) ? 'blocked' : 'wrong';
 }
 
 /** Admins and DMs: the logins that set their own passwords. */
