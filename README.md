@@ -45,7 +45,7 @@ Deleting a player leaves their character in the party without a login. A DM can 
 
 Admins and DMs change their own password under *Change password*. The admin can also reset a DM's password from *Users*, and DMs reset their players' under *Party & logins*. A new password signs that login out everywhere else.
 
-Wrong passwords slow guessing down, at sign-in and on *Change password* alike. After 5 wrong tries for one name from one address, or 20 from one address in all, that address waits 15 minutes; a session guessing on *Change password* is signed out. Someone already signed in isn't paused by other people's mistakes at a shared address. Each pause is written to the account log.
+Wrong passwords slow guessing down, at sign-in and on *Change password* alike. After 5 wrong tries for one name from one address, or 20 from one address in all, that address waits 15 minutes; a session guessing on *Change password* is signed out. An IPv6 connection is handed a whole /64 of addresses, so those count as one address. Guesses spread over many addresses are held back too: after 50 wrong tries for one name from anywhere, nobody can sign in under that name for 15 minutes, right password or not. Someone already signed in isn't paused by other people's mistakes, at a shared address or anywhere else. Each pause is written to the account log.
 
 If you put the site behind a proxy or CDN such as Cloudflare, every visitor's address looks like the proxy's, so one person's wrong passwords would pause everyone. Set `client_ip_header` in `config.php` to the header holding the real address (`'HTTP_CF_CONNECTING_IP'` for Cloudflare). Leave it unset otherwise, since visitors could fake that header.
 
