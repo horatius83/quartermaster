@@ -29,12 +29,12 @@ export async function signIn(page: Page, username: string, password = PLAYER_PAS
 export const signInAsDm = (page: Page) => signIn(page, DM.username, DM.password);
 export const signInAsAdmin = (page: Page) => signIn(page, ADMIN.username, ADMIN.password);
 
-/** Load a system's SRD items from the admin dashboard, then sign back in as the DM. */
-export async function loadSrd(page: Page, system: string): Promise<void> {
+/** Load a system's SRD gear (or its magic items) from the admin dashboard, then sign back in as the DM. */
+export async function loadSrd(page: Page, system: string, set: 'gear' | 'magic items' = 'gear'): Promise<void> {
   await signInAsAdmin(page);
   await page.goto('/admin');
-  await page.getByRole('button', { name: `Load ${system} SRD items` }).click();
-  await expect(toasts(page)).toContainText(`${system} SRD item`);
+  await page.getByRole('button', { name: `Load ${system} SRD ${set}` }).click();
+  await expect(toasts(page)).toContainText(`${system} SRD ${set === 'gear' ? 'gear item' : 'magic item'}`);
   await signInAsDm(page);
 }
 

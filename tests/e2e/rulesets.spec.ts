@@ -259,16 +259,16 @@ test.describe('a DM with campaigns in two systems', () => {
 
     const load = async (system: string) => {
       await page.goto('/admin');
-      await page.getByRole('button', { name: `Load ${system} SRD items` }).click();
+      await page.getByRole('button', { name: `Load ${system} SRD gear` }).click();
     };
     await signInAsAdmin(page);
     await load('5e');
-    await expect(toasts(page)).toContainText(/Added \d+ 5e SRD items and skipped \d+ already in the catalog\./);
+    await expect(toasts(page)).toContainText(/Added \d+ 5e SRD gear items and skipped \d+ already in the catalog\./);
     await load('3.5e');
-    await expect(toasts(page)).toContainText(/Added \d+ 3\.5e SRD items\./);
+    await expect(toasts(page)).toContainText(/Added \d+ 3\.5e SRD gear items\./);
     // Once everything's in, the button says so rather than offering to do nothing.
-    await expect(page.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeDisabled();
-    await expect(page.getByRole('article', { name: '3.5e SRD' })).toContainText('Loaded');
+    await expect(page.getByRole('button', { name: 'Load 3.5e SRD gear' })).toBeDisabled();
+    await expect(page.getByRole('article', { name: '3.5e SRD' }).getByRole('region', { name: 'Weapons, armor and gear' })).toContainText('Loaded');
 
     await signInAsDm(page);
     await page.goto('/dm/catalog');

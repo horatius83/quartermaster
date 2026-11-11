@@ -97,7 +97,7 @@ $check('an item is found in its own edition', '3.5e', item_by_name('EDITION SWOR
 
 // The bundled SRD items have to fit the real columns, which SQLite wouldn't enforce.
 foreach (SRD_RULESETS as $ruleset) {
-    $rows = srd_items($ruleset);
+    $rows = array_merge(...array_map(fn($set) => srd_items($ruleset, $set), array_keys(SRD_SETS)));
     $slugIds = array_column(categories(), 'id', 'slug');
     transaction(function () use ($rows, $ruleset, $slugIds) {
         foreach ($rows as [$name, $slug, $weight, $price, $tags, $description]) {
@@ -107,6 +107,15 @@ foreach (SRD_RULESETS as $ruleset) {
     $check("every {$ruleset} SRD item saves", count($rows), (int)q_val('SELECT COUNT(*) FROM items WHERE ruleset = ?', [$ruleset]) - ($ruleset === '5e' ? 2 : 1));
 }
 $check('SRD weights keep their fractions', '0.25', rtrim((string)q_val("SELECT weight FROM items WHERE name = 'Dart' AND ruleset = '5e'"), '0'));
+
+// Loading takes the sentences an earlier version of the data had out of descriptions, with MySQL's collation comparing.
+q("UPDATE items SET description = ? WHERE name = 'Lute' AND ruleset = '5e'", [SRD_STALE_TEXT['5e']['gear'][1] . 'Cracked neck.']);
+q("UPDATE items SET description = ? WHERE name = 'Drum' AND ruleset = '5e'", [mb_strtoupper(SRD_STALE_TEXT['5e']['gear'][1]) . 'Loud.']);
+$check('a stale sentence is counted', 1, srd_stale_count('5e', 'gear'));
+$check('loading tidies it', 1, import_srd('5e', 'gear')['tidied']);
+$check('the rest of the description stays', 'Cracked neck.', q_val("SELECT description FROM items WHERE name = 'Lute' AND ruleset = '5e'"));
+$check('a sentence differing in case is left alone', 'Loud.', substr((string)q_val("SELECT description FROM items WHERE name = 'Drum' AND ruleset = '5e'"), -5));
+$check('nothing is left to tidy', 0, srd_stale_count('5e', 'gear'));
 
 // Setting a campaign's system moves what it holds, using updates MySQL is fussier about than SQLite.
 $older = q_one("SELECT * FROM campaigns WHERE name = 'Older campaign'");

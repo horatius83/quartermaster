@@ -12,7 +12,11 @@ function admin_dashboard(): void
     require_admin();
     $srd = [];
     foreach (SRD_RULESETS as $ruleset) {
-        $srd[$ruleset] = srd_status($ruleset) + ['label' => ruleset_label($ruleset)];
+        $srd[$ruleset] = ['label' => ruleset_label($ruleset), 'sets' => []];
+        $taken = srd_taken_keys($ruleset);
+        foreach (array_keys(SRD_SETS) as $set) {
+            $srd[$ruleset]['sets'][$set] = srd_status($ruleset, $set, $taken) + ['stale' => srd_stale_count($ruleset, $set)];
+        }
     }
     page('admin/dashboard', [
         'active'    => 'dashboard',
@@ -26,18 +30,25 @@ function admin_dashboard(): void
     ], 'Dashboard');
 }
 
-/** Load one system's SRD items into its catalog, which every DM's campaigns of that system share. */
+/** Load one set of a system's SRD items (its gear or its magic items) into its catalog, which every DM's campaigns of that system share. */
 function admin_import_srd(): void
 {
     require_admin();
     $ruleset = post_str('edition', 10);
+    // A form from before magic items could be loaded sends no set, and meant the gear.
+    $set = post_str('set', 10) ?: 'gear';
     if (!in_array($ruleset, SRD_RULESETS, true)) {
         flash('There are no SRD items to load for ' . ruleset_label($ruleset) . '.', 'error');
         redirect('/admin');
     }
-    $added = import_srd($ruleset);
-    $skipped = count(srd_items($ruleset)) - $added;
-    flash("Added {$added} " . ruleset_label($ruleset) . ' SRD ' . ($added === 1 ? 'item' : 'items') . ($skipped ? " and skipped {$skipped} already in the catalog." : '.'));
+    if (!isset(SRD_SETS[$set])) {
+        flash('There are no SRD items of that kind to load.', 'error');
+        redirect('/admin');
+    }
+    ['added' => $added, 'skipped' => $skipped, 'tidied' => $tidied] = import_srd($ruleset, $set);
+    $noun = SRD_SETS[$set]['noun'] . ($added === 1 ? '' : 's');
+    $tidy = $tidied ? ' ' . ($tidied === 1 ? '1 description' : "{$tidied} descriptions") . ' lost a sentence about a table the catalog doesn’t have.' : '';
+    flash("Added {$added} " . ruleset_label($ruleset) . " SRD {$noun}" . ($skipped ? " and skipped {$skipped} already in the catalog." : '.') . $tidy);
     redirect('/admin');
 }
 

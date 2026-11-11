@@ -10,6 +10,14 @@ declare(strict_types=1);
 const CAMPAIGN_RULESETS = ['5e' => '5e', '3.5e' => '3.5e', 'pf1e' => 'Pathfinder 1e', 'pf2e' => 'Pathfinder 2e'];
 /** The systems with items to load, in app/data/srd-<system>.php. */
 const SRD_RULESETS = ['5e', '3.5e'];
+/**
+ * The sets of SRD items each of those systems loads separately, each from app/data/srd-<system><file>.php: what its
+ * dashboard section is titled, how its button's name ends ("Load 5e SRD gear"), and what one of its items is called.
+ */
+const SRD_SETS = [
+    'gear'  => ['file' => '', 'title' => 'Weapons, armor and gear', 'button' => 'gear', 'noun' => 'gear item'],
+    'magic' => ['file' => '-magic', 'title' => 'Magic items', 'button' => 'magic items', 'noun' => 'magic item'],
+];
 const DEFAULT_RULESET = '5e';
 
 /** The signed-in user's id, which owns the campaigns a DM sees. */
@@ -544,10 +552,55 @@ function srd_name_key(string $name): string
     return mb_strtolower(str_replace('’', "'", $name));
 }
 
-/** The bundled SRD items for a system in SRD_RULESETS: [name, category slug, weight, price, tags, description] rows. */
-function srd_items(string $ruleset): array
+/**
+ * One set (a key of SRD_SETS) of the bundled SRD items for a system in SRD_RULESETS:
+ * [name, category slug, weight, price, tags, description] rows.
+ */
+function srd_items(string $ruleset, string $set = 'gear'): array
 {
-    return require APP_DIR . "/data/srd-{$ruleset}.php";
+    if (!isset(SRD_SETS[$set])) {
+        throw new InvalidArgumentException("There is no SRD set called {$set}.");
+    }
+    return require APP_DIR . "/data/srd-{$ruleset}" . SRD_SETS[$set]['file'] . '.php';
+}
+
+/**
+ * Sentences that earlier versions of a set's SRD data had, each pointing to a table the catalog doesn't include. Loading
+ * the set takes them out of descriptions already in the catalog, so a catalog loaded before they were cut loses them too.
+ */
+const SRD_STALE_TEXT = [
+    '5e' => ['gear' => [
+        ' The table shows examples of the most common types of tools, each providing items related to a single craft.',
+        'Several of the most common types of musical instruments are shown on the table as examples. ',
+        ' A few common examples appear on the Tools table, but other kinds of gaming sets exist.',
+    ]],
+];
+
+/**
+ * A system's descriptions with a set's stale sentences taken out, as SQL and its parameters: REPLACE is exact in both
+ * databases, so comparing its result with the description finds the rows it would change, whatever the collation.
+ */
+function srd_tidied_description(string $ruleset, string $set): ?array
+{
+    $stale = SRD_STALE_TEXT[$ruleset][$set] ?? [];
+    if (!$stale) {
+        return null;
+    }
+    $sql = 'description';
+    foreach ($stale as $_) {
+        $sql = "REPLACE({$sql}, ?, '')";
+    }
+    return [$sql, $stale];
+}
+
+/** How many of a system's descriptions still have one of a set's stale sentences. */
+function srd_stale_count(string $ruleset, string $set): int
+{
+    if (!$tidied = srd_tidied_description($ruleset, $set)) {
+        return 0;
+    }
+    [$sql, $params] = $tidied;
+    return (int)q_val("SELECT COUNT(*) FROM items WHERE ruleset = ? AND description <> {$sql}", [$ruleset, ...$params]);
 }
 
 /** The name keys a system's catalog already has, to compare SRD rows against. */
@@ -556,26 +609,30 @@ function srd_taken_keys(string $ruleset): array
     return array_flip(array_map(srd_name_key(...), array_column(q_all('SELECT name FROM items WHERE ruleset = ?', [$ruleset]), 'name')));
 }
 
-/** How much of a system's SRD is in its catalog: ['total' => rows bundled, 'present' => how many of those it has]. */
-function srd_status(string $ruleset): array
+/**
+ * How much of one set of a system's SRD is in its catalog: ['total' => rows bundled, 'present' => how many of those it
+ * has]. Pass the system's srd_taken_keys() when checking several sets, so the catalog is read once.
+ */
+function srd_status(string $ruleset, string $set = 'gear', ?array $taken = null): array
 {
-    $taken = srd_taken_keys($ruleset);
-    $rows = srd_items($ruleset);
+    $taken ??= srd_taken_keys($ruleset);
+    $rows = srd_items($ruleset, $set);
     $present = count(array_filter($rows, fn($row) => isset($taken[srd_name_key($row[0])])));
     return ['total' => count($rows), 'present' => $present];
 }
 
 /**
- * Add a system's SRD items to its catalog and return how many were added. A name that system already has is
- * skipped, so a DM's own prices and descriptions are never overwritten.
+ * Add one set of a system's SRD items to its catalog: ['added' => how many were, 'skipped' => how many it already
+ * had, 'tidied' => how many descriptions lost a stale sentence]. A name that system already has is skipped, so a DM's
+ * own prices and descriptions are never overwritten; only the sentences in SRD_STALE_TEXT are taken out of them.
  */
-function import_srd(string $ruleset): int
+function import_srd(string $ruleset, string $set = 'gear'): array
 {
     $categoryIds = array_column(categories(), 'id', 'slug');
-    $rows = srd_items($ruleset);
+    $rows = srd_items($ruleset, $set);
     // The database decides what counts as the same name, so its collation is what's asked when an insert fails, not PHP.
     $seen = srd_taken_keys($ruleset);
-    return transaction(function () use ($ruleset, $categoryIds, $rows, $seen) {
+    return transaction(function () use ($ruleset, $set, $categoryIds, $rows, $seen) {
         $added = 0;
         foreach ($rows as [$name, $slug, $weight, $price, $tags, $description]) {
             if (isset($seen[srd_name_key($name)])) {
@@ -593,6 +650,14 @@ function import_srd(string $ruleset): int
             set_item_tags((int)$item['id'], $tags);
             $added++;
         }
-        return $added;
+        $tidied = 0;
+        if ($replace = srd_tidied_description($ruleset, $set)) {
+            [$sql, $params] = $replace;
+            $tidied = q(
+                "UPDATE items SET description = {$sql} WHERE ruleset = ? AND description <> {$sql}",
+                [...$params, $ruleset, ...$params]
+            )->rowCount();
+        }
+        return ['added' => $added, 'skipped' => count($rows) - $added, 'tidied' => $tidied];
     });
 }
