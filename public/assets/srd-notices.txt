@@ -10,14 +10,16 @@ available at https://dnd.wizards.com/resources/systems-reference-document. The S
 Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
 The material was changed: item names were reworded to read naturally in a list, and some stats were written out as
-short descriptions.
+short descriptions. Sentences pointing to tables that aren't included were taken out of the tool and instrument
+descriptions. Long magic item descriptions were shortened, and magic items the SRD 5.1 gives no price were given one
+by rarity.
 
 
 SYSTEM REFERENCE DOCUMENT (the 3.5e items)
 ==========================================
 
-The whole of app/data/srd-3.5e.php is Open Game Content, used under the license below. It declares no Product Identity
-of its own. Quartermaster is not affiliated with or endorsed by Wizards of the Coast.
+The whole of app/data/srd-3.5e.php and app/data/srd-3.5e-magic.php is Open Game Content, used under the license
+below. Neither declares Product Identity of its own. Quartermaster is not affiliated with or endorsed by Wizards of the Coast.
 
 
 OPEN GAME LICENSE Version 1.0a

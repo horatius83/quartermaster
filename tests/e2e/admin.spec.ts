@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, signIn, signInAsAdmin, signInAsDm, toasts, BRYN } from './fixtures';
+import { test, expect, loadSrd, signIn, signInAsAdmin, signInAsDm, toasts, BRYN } from './fixtures';
 import { resetDatabase } from './php';
 
 const userRow = (page: Page, username: string) =>
@@ -26,26 +26,92 @@ test('the admin signs in to the dashboard, and the SRD loaders say what they’d
   await expect(page).toHaveURL(/\/admin$/);
   const five = page.getByRole('article', { name: '5e SRD', exact: true });
   const threeFive = page.getByRole('article', { name: '3.5e SRD' });
-  // The demo's 5e catalog has some SRD gear already; its 3.5e catalog has none.
-  await expect(five).toContainText('Partly loaded');
-  await expect(threeFive).toContainText('Not loaded');
-  await expect(five.getByRole('button', { name: 'Load 5e SRD items' })).toBeEnabled();
+  const fiveGear = five.getByRole('region', { name: 'Weapons, armor and gear' });
+  const fiveMagic = five.getByRole('region', { name: 'Magic items' });
+  // The demo's 5e catalog has some SRD gear and a few magic items already; its 3.5e catalog has none.
+  await expect(fiveGear).toContainText('Partly loaded');
+  await expect(fiveMagic).toContainText('Partly loaded');
+  await expect(threeFive.getByRole('region', { name: 'Weapons, armor and gear' })).toContainText('Not loaded');
+  await expect(threeFive.getByRole('region', { name: 'Magic items' })).toContainText('Not loaded');
+  await expect(fiveGear.getByRole('button', { name: 'Load 5e SRD gear' })).toBeEnabled();
 
-  await five.getByRole('button', { name: 'Load 5e SRD items' }).click();
-  await expect(toasts(page)).toContainText(/Added \d+ 5e SRD items and skipped \d+ already in the catalog\./);
-  await expect(five).toContainText('Loaded');
-  await expect(five).toContainText('There’s nothing to add.');
-  await expect(five.getByRole('button', { name: 'Load 5e SRD items' })).toBeDisabled();
-  await expect(threeFive.getByRole('button', { name: 'Load 3.5e SRD items' })).toBeEnabled();
+  await fiveGear.getByRole('button', { name: 'Load 5e SRD gear' }).click();
+  await expect(toasts(page)).toContainText(/Added \d+ 5e SRD gear items and skipped \d+ already in the catalog\./);
+  await expect(fiveGear).toContainText('Loaded');
+  await expect(fiveGear).toContainText('There’s nothing to add.');
+  await expect(fiveGear.getByRole('button', { name: 'Load 5e SRD gear' })).toBeDisabled();
+  // Loading the gear leaves the magic items to be loaded on their own.
+  await expect(fiveMagic).toContainText('Partly loaded');
+  await expect(fiveMagic.getByRole('button', { name: 'Load 5e SRD magic items' })).toBeEnabled();
+  await expect(threeFive.getByRole('button', { name: 'Load 3.5e SRD gear' })).toBeEnabled();
 
-  // Asking anyway, as a page from before or a hand-made request might, adds nothing and says so.
+  // Asking anyway, as a page from before or a hand-made request might, adds nothing and says so. A form from
+  // before magic items sends no set, and means the gear.
   const token = await page.locator('input[name="_csrf"]').first().getAttribute('value');
   await page.request.post('/admin/srd', { form: { edition: '5e', _csrf: token! }, maxRedirects: 0 });
   await page.reload();
-  await expect(toasts(page)).toContainText(/Added 0 5e SRD items and skipped \d+ already in the catalog\./);
-  await page.request.post('/admin/srd', { form: { edition: 'pf1e', _csrf: token! }, maxRedirects: 0 });
+  await expect(toasts(page)).toContainText(/Added 0 5e SRD gear items and skipped \d+ already in the catalog\./);
+  await page.request.post('/admin/srd', { form: { edition: 'pf1e', set: 'gear', _csrf: token! }, maxRedirects: 0 });
   await page.reload();
   await expect(toasts(page)).toContainText('There are no SRD items to load for Pathfinder 1e.');
+  await page.request.post('/admin/srd', { form: { edition: '5e', set: 'mounts', _csrf: token! }, maxRedirects: 0 });
+  await page.reload();
+  await expect(toasts(page)).toContainText('There are no SRD items of that kind to load.');
+});
+
+test('the admin loads each system’s magic items, priced and tagged, without touching the DM’s', async ({ page }) => {
+  await signInAsAdmin(page);
+  const fiveMagic = page.getByRole('article', { name: '5e SRD', exact: true }).getByRole('region', { name: 'Magic items' });
+  // The demo already has a Bag of Holding and a Potion of Healing of its own (its Driftglobe isn't in the SRD).
+  await expect(fiveMagic).toContainText(/2 of \d+ magic items are in the 5e catalog/);
+  await fiveMagic.getByRole('button', { name: 'Load 5e SRD magic items' }).click();
+  await expect(toasts(page)).toContainText(/Added \d+ 5e SRD magic items and skipped 2 already in the catalog\./);
+  await expect(fiveMagic).toContainText('Loaded');
+  await expect(fiveMagic.getByRole('button', { name: 'Load 5e SRD magic items' })).toBeDisabled();
+
+  const threeFiveMagic = page.getByRole('article', { name: '3.5e SRD' }).getByRole('region', { name: 'Magic items' });
+  await threeFiveMagic.getByRole('button', { name: 'Load 3.5e SRD magic items' }).click();
+  await expect(toasts(page)).toContainText(/Added \d+ 3\.5e SRD magic items\./);
+  await expect(threeFiveMagic).toContainText('Loaded');
+  // The 3.5e gear is still waiting for its own button.
+  await expect(page.getByRole('article', { name: '3.5e SRD' }).getByRole('region', { name: 'Weapons, armor and gear' })).toContainText('Not loaded');
+
+  await signInAsDm(page);
+  const row = (name: string) => page.locator('#catalog-body tr').filter({ has: page.locator(`input[name="name"][value="${name}"]`) });
+  // A 5e item is priced by its rarity, which is also a tag.
+  await page.goto('/dm/catalog?q=Cloak+of+elvenkind');
+  await expect(row('Cloak of elvenkind').getByLabel('Price')).toHaveValue('500 gp');
+  await expect(row('Cloak of elvenkind').getByLabel('Tags')).toHaveValue('attunement, uncommon, wondrous');
+  await expect(row('Cloak of elvenkind').getByLabel('Category').locator('option:checked')).toHaveText('Magic Item');
+  // The demo's own items keep their prices: its Bag of Holding is free, where the SRD's would be 500 gp.
+  await page.goto('/dm/catalog?q=Bag+of+holding');
+  await expect(row('Bag of Holding').getByLabel('Price')).toHaveValue('0 gp');
+  await page.goto('/dm/catalog?q=healing');
+  await expect(row('Potion of greater healing').getByLabel('Price')).toHaveValue('500 gp');
+});
+
+test('loading takes a sentence about a missing table out of descriptions an earlier version left, and nothing else', async ({ page }) => {
+  await loadSrd(page, '5e');
+  // A lute loaded before that sentence was cut, with a note of the DM's own after it.
+  const lute = page.locator('#catalog-body tr').filter({ has: page.locator('input[name="name"][value="Lute"]') }).getByLabel('Description');
+  await page.goto('/dm/catalog?q=Lute');
+  await lute.fill('Several of the most common types of musical instruments are shown on the table as examples. Bryn’s, with a cracked neck.');
+  await lute.blur();
+  await expect(toasts(page)).toContainText('Saved Lute.');
+
+  await signInAsAdmin(page);
+  const gear = page.getByRole('article', { name: '5e SRD', exact: true }).getByRole('region', { name: 'Weapons, armor and gear' });
+  await expect(gear).toContainText('Needs tidying');
+  await expect(gear).toContainText('1 description still mentions a table the catalog doesn’t have');
+  await gear.getByRole('button', { name: 'Load 5e SRD gear' }).click();
+  await expect(toasts(page)).toContainText('Added 0 5e SRD gear items and skipped');
+  await expect(toasts(page)).toContainText('1 description lost a sentence about a table the catalog doesn’t have.');
+  await expect(gear).toContainText('Loaded');
+  await expect(gear.getByRole('button', { name: 'Load 5e SRD gear' })).toBeDisabled();
+
+  await signInAsDm(page);
+  await page.goto('/dm/catalog?q=Lute');
+  await expect(lute).toHaveValue('Bryn’s, with a cracked neck.');
 });
 
 test('the admin can see every login', async ({ page }) => {
