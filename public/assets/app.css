@@ -312,8 +312,11 @@ label.field, div.field { display: flex; flex-direction: column; gap: 2px; font-s
 
 /* Item-name suggestions (views/partials/item_suggest.php) */
 .suggest { position: relative; }
-.suggest-control { display: flex; }
+.suggest-control { display: flex; border-radius: 6px; }
 .suggest-control input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+/* The ▾ button is part of the field, so the focus ring wraps both rather than stopping at the text box. */
+.suggest-control:has(input:focus-visible) { outline: 3px solid var(--ochre); outline-offset: 2px; }
+.suggest-control input:focus-visible { outline: none; }
 .suggest-toggle {
   flex: 0 0 44px; min-height: 44px; margin-left: -1.5px;
   font: inherit; font-size: 20px; line-height: 1; color: var(--ink); cursor: pointer;
