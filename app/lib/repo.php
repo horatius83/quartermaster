@@ -107,8 +107,8 @@ function ruleset_label(string $ruleset): string
 
 /**
  * Say which system a campaign from before systems really plays, which can only happen once. Call inside a transaction.
- * The upgrade labelled everything 5e, so the items this campaign uses (in its packs, on its shelves, in its carts and
- * its history) are copied into the chosen system, and the campaign moves to the copies. Only those: the shared catalog
+ * The upgrade labelled everything 5e, so the items this campaign uses (in its packs, on its shelves, in its carts, its
+ * sales and its history) are copied into the chosen system, and the campaign moves to the copies. Only those: the shared catalog
  * also holds other DMs' items, which aren't this campaign's to take along. The originals stay, since other campaigns
  * may really be 5e, and a name the chosen system already has means that item. Returns how many items were copied.
  */
@@ -122,8 +122,9 @@ function settle_campaign_system(array $campaign, string $ruleset): int
                  SELECT inv.item_id FROM inventory inv JOIN characters ch ON ch.id = inv.character_id WHERE ch.campaign_id = ?
                  UNION SELECT st.item_id FROM store_stock st JOIN stores s ON s.id = st.store_id WHERE s.campaign_id = ?
                  UNION SELECT ci.item_id FROM cart_items ci JOIN carts c ON c.id = ci.cart_id JOIN stores s ON s.id = c.store_id WHERE s.campaign_id = ?
+                 UNION SELECT sa.item_id FROM sales sa JOIN characters ch ON ch.id = sa.character_id WHERE ch.campaign_id = ?
                  UNION SELECT l.item_id FROM inventory_log l WHERE l.campaign_id = ?)',
-            [$campaign['ruleset'], $id, $id, $id, $id]
+            [$campaign['ruleset'], $id, $id, $id, $id, $id]
         );
         foreach (with_item_tags($used) as $item) {
             $copy = item_by_name($item['name'], $ruleset);
@@ -141,6 +142,7 @@ function settle_campaign_system(array $campaign, string $ruleset): int
             q('UPDATE inventory SET item_id = ? WHERE item_id = ? AND character_id IN (SELECT id FROM characters WHERE campaign_id = ?)', $move);
             q('UPDATE store_stock SET item_id = ? WHERE item_id = ? AND store_id IN (SELECT id FROM stores WHERE campaign_id = ?)', $move);
             q('UPDATE cart_items SET item_id = ? WHERE item_id = ? AND cart_id IN (SELECT c.id FROM carts c JOIN stores s ON s.id = c.store_id WHERE s.campaign_id = ?)', $move);
+            q('UPDATE sales SET item_id = ? WHERE item_id = ? AND character_id IN (SELECT id FROM characters WHERE campaign_id = ?)', $move);
             q('UPDATE inventory_log SET item_id = ? WHERE item_id = ? AND campaign_id = ?', $move);
         }
     }
@@ -544,6 +546,139 @@ function cart_detail(int $cartId): ?array
         $cart['unit_count'] += (int)$line['quantity'];
     }
     return $cart;
+}
+
+/** The most a sale can ask or be offered, so a purse can't run past what its column holds (10 million gp). */
+const MAX_SALE_CP = 1_000_000_000;
+/** Sales still waiting on someone: the DM (pending) or the player (countered). Their items count as on offer. */
+const OPEN_SALE_STATUSES = "('pending','countered')";
+
+/** Offers to sell waiting on the DM, for the sidebar badge. */
+function pending_sale_count(): int
+{
+    return (int)q_val(
+        "SELECT COUNT(*) FROM sales sa JOIN characters ch ON ch.id = sa.character_id WHERE sa.status = 'pending' AND ch.campaign_id = ?",
+        [campaign_id()]
+    );
+}
+
+/** A character's offers with a counter-offer waiting on them, for the player's badge. */
+function countered_sale_count(int $characterId): int
+{
+    return (int)q_val("SELECT COUNT(*) FROM sales WHERE character_id = ? AND status = 'countered'", [$characterId]);
+}
+
+/**
+ * What a sale sells for: what it sold for once sold, else the DM's counter-offer while one stands, else the asking price.
+ * A DM who accepts the asking price after countering sells at the asking price, which sold_cp records.
+ */
+function sale_price(array $sale): int
+{
+    return (int)($sale['sold_cp'] ?? $sale['offer_cp'] ?? $sale['asking_cp']);
+}
+
+/**
+ * The current campaign's sales matching $where (on sales sa and characters ch), each with its item, character, how many
+ * of that stack the pack holds now ('held'), and 'price_cp' from sale_price().
+ */
+function sale_list(string $where, array $params = [], string $order = 'sa.created_at', int $limit = 0): array
+{
+    $sales = q_all(
+        'SELECT sa.*, ch.name AS character_name, ch.coin_cp, i.name, i.price_cp AS list_price_cp,
+                cat.name AS category, cat.slug AS category_slug,
+                (SELECT COALESCE(SUM(inv.quantity), 0) FROM inventory inv
+                  WHERE inv.character_id = sa.character_id AND inv.item_id = sa.item_id AND inv.notes = sa.notes) AS held
+           FROM sales sa
+           JOIN characters ch ON ch.id = sa.character_id
+           JOIN items i ON i.id = sa.item_id
+           JOIN categories cat ON cat.id = i.category_id
+          WHERE ch.campaign_id = ? AND ' . $where . ' ORDER BY ' . $order . ', sa.id' . ($limit ? ' LIMIT ' . $limit : ''),
+        [campaign_id(), ...$params]
+    );
+    return array_map(fn($s) => $s + ['price_cp' => sale_price($s)], $sales);
+}
+
+function sale_detail(int $saleId): ?array
+{
+    return sale_list('sa.id = ?', [$saleId])[0] ?? null;
+}
+
+/** The key offered_quantities() files a stack under. */
+function stack_key(int $itemId, string $notes): string
+{
+    return $itemId . "\0" . $notes;
+}
+
+/**
+ * How many of each of a character's stacks are already on offer, by stack_key(), so they can't be offered twice.
+ * Call inside a transaction, after locking the stack, to rely on the count.
+ */
+function offered_quantities(int $characterId): array
+{
+    $rows = q_all(
+        'SELECT item_id, notes, SUM(quantity) AS qty FROM sales
+          WHERE character_id = ? AND status IN ' . OPEN_SALE_STATUSES . ' GROUP BY item_id, notes',
+        [$characterId]
+    );
+    $offered = [];
+    foreach ($rows as $r) {
+        $offered[stack_key((int)$r['item_id'], $r['notes'])] = (int)$r['qty'];
+    }
+    return $offered;
+}
+
+/**
+ * Close a sale: take its items from the pack, pay its price into the purse and log both, in one transaction.
+ * The DM ($byPlayer false) accepts the asking price, of an offer pending or countered (changing their mind about the
+ * counter); the player accepts the DM's counter-offer. With $seenPrice, it only sells at that price, so a counter-offer
+ * the DM changed meanwhile isn't taken unseen. Throws RuntimeException, with a message to show, when it can't.
+ */
+function settle_sale(int $saleId, bool $byPlayer, ?int $seenPrice = null): void
+{
+    transaction(function () use ($saleId, $byPlayer, $seenPrice) {
+        // Lock the sale, then the purse and the stack, so two clicks can't sell the same items twice.
+        $sale = q_one('SELECT * FROM sales WHERE id = ?' . for_update(), [$saleId]);
+        if (!$sale || !in_array($sale['status'], $byPlayer ? ['countered'] : ['pending', 'countered'], true)) {
+            throw new RuntimeException('That offer has already been settled.');
+        }
+        $char = q_one('SELECT * FROM characters WHERE id = ?' . for_update(), [$sale['character_id']]);
+        $item = q_one('SELECT id AS item_id, name FROM items WHERE id = ?', [$sale['item_id']]);
+        $rows = q_all(
+            'SELECT id, quantity FROM inventory WHERE character_id = ? AND item_id = ? AND notes = ? ORDER BY id' . for_update(),
+            [$sale['character_id'], $sale['item_id'], $sale['notes']]
+        );
+        $qty = (int)$sale['quantity'];
+        $held = array_sum(array_map('intval', array_column($rows, 'quantity')));
+        if ($held < $qty) {
+            throw new RuntimeException($held
+                ? "{$char['name']} has only {$held} × {$item['name']} left, not {$qty}."
+                : "{$char['name']} no longer has the {$item['name']}.");
+        }
+        $price = $byPlayer ? (int)$sale['offer_cp'] : (int)$sale['asking_cp'];
+        if ($seenPrice !== null && $seenPrice !== $price) {
+            throw new RuntimeException('Your DM changed their offer to ' . coins($price) . '. Take another look.');
+        }
+        if ((int)$char['coin_cp'] + $price > 2_147_483_647) {
+            throw new RuntimeException("{$char['name']}’s purse can’t hold that much coin.");
+        }
+
+        $left = $qty;
+        foreach ($rows as $r) {
+            $take = min($left, (int)$r['quantity']);
+            if ($take === (int)$r['quantity']) {
+                q('DELETE FROM inventory WHERE id = ?', [$r['id']]);
+            } else {
+                q('UPDATE inventory SET quantity = quantity - ? WHERE id = ?', [$take, $r['id']]);
+            }
+            if (($left -= $take) === 0) {
+                break;
+            }
+        }
+        q('UPDATE characters SET coin_cp = coin_cp + ? WHERE id = ?', [$price, $char['id']]);
+        log_inventory((int)$char['id'], 'sell', $item, -$qty, notes: $sale['notes'], detail: 'Sold for ' . coins($price));
+        log_inventory((int)$char['id'], 'sell', coinCp: $price, detail: "For {$qty} × {$item['name']}");
+        q("UPDATE sales SET status = 'sold', sold_cp = ?, decided_at = ? WHERE id = ?", [$price, now(), $saleId]);
+    });
 }
 
 /** A name in the form the SRD import compares, since DMs usually type a straight apostrophe where the data has a curly one. */

@@ -46,7 +46,8 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <?= $nav('history', '/dm/history', 'Pack history') ?>
     <?= $nav('stores', '/dm/stores', 'Stores') ?>
     <?= $nav('catalog', '/dm/catalog', 'Item catalog') ?>
-    <?= $nav('carts', '/dm/carts', 'Cart review', render('partials/cart_badge_oob', ['inline' => true])) ?>
+    <?= $nav('carts', '/dm/carts', 'Cart review', render('partials/badge_oob', ['id' => 'cart-badge', 'count' => pending_cart_count(), 'inline' => true])) ?>
+    <?= $nav('sales', '/dm/sales', 'Sale offers', render('partials/badge_oob', ['id' => 'sale-badge', 'count' => pending_sale_count(), 'inline' => true])) ?>
     <?= $nav('party', '/dm/party', 'Party & logins') ?>
     <div class="nav-rule"></div>
     <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
@@ -89,7 +90,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
       <a class="brand" href="<?= e(url('/shop')) ?>"><?= render('partials/icon_pouch', []) ?><span>Quartermaster</span></a>
       <nav class="topnav" aria-label="Player">
         <?= $nav('shop', '/shop', 'Shops') ?>
-        <?= $nav('pack', '/pack', 'My pack') ?>
+        <?= $nav('pack', '/pack', 'My pack', $me ? render('partials/badge_oob', ['id' => 'offer-badge', 'count' => countered_sale_count((int)$me['id']), 'inline' => true, 'label' => 'counter-offers waiting']) : '') ?>
         <?= $nav('history', '/history', 'History') ?>
       </nav>
     </div>

@@ -231,9 +231,11 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.05; m
 .tag-treasure { background: #E0A84A; color: #2E2118; }
 
 .status { padding: 2px 12px; border-radius: 999px; font-size: 15px; white-space: nowrap; }
-.status-open, .status-approved { background: var(--moss); color: #fff; }
-.status-hidden, .status-declined { background: var(--bark-soft); color: #4A3A2C; }
-.status-submitted { background: var(--ochre); color: var(--ink); }
+.status-open, .status-approved, .status-sold { background: var(--moss); color: #fff; }
+.status-hidden, .status-declined, .status-rejected { background: var(--bark-soft); color: #4A3A2C; }
+.status-submitted, .status-pending { background: var(--ochre); color: var(--ink); }
+.status-countered { background: var(--clay-dark); color: #fff; }
+.sell-form { text-align: left; padding: 8px 0 4px; min-width: 260px; }
 
 /* ---------- Controls ---------- */
 

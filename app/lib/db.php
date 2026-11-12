@@ -48,6 +48,7 @@ const UPGRADES = [
     '005-item-tags'     => 'SELECT 1 FROM item_tags LIMIT 1',
     '006-rulesets'      => 'SELECT ruleset FROM campaigns LIMIT 1',
     '007-system-choice' => 'SELECT ruleset_open FROM campaigns LIMIT 1',
+    '008-sales'         => 'SELECT 1 FROM sales LIMIT 1',
 ];
 
 /**

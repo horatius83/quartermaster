@@ -80,6 +80,12 @@ $routes = [
     ['POST', '/dm/carts/{id}/decline',     'dm_cart_decline'],
     ['POST', '/dm/cart-items/{id}',        'dm_cart_item_qty'],
 
+    // DM: offers to sell from a pack
+    ['GET',  '/dm/sales',                  'dm_sales'],
+    ['POST', '/dm/sales/{id}/accept',      'dm_sale_accept'],
+    ['POST', '/dm/sales/{id}/counter',     'dm_sale_counter'],
+    ['POST', '/dm/sales/{id}/reject',      'dm_sale_reject'],
+
     // Player
     ['GET',  '/shop',                      'shop_index'],
     ['GET',  '/shop/{id}',                 'shop'],
@@ -88,6 +94,10 @@ $routes = [
     ['POST', '/shop/{id}/withdraw',        'shop_withdraw'],
     ['POST', '/shop/line/{id}',            'shop_line_qty'],
     ['GET',  '/pack',                      'player_pack'],
+    ['POST', '/pack/{id}/sell',            'pack_sell'],
+    ['POST', '/pack/sales/{id}/withdraw',  'pack_sale_withdraw'],
+    ['POST', '/pack/sales/{id}/accept',    'pack_sale_accept'],
+    ['POST', '/pack/sales/{id}/decline',   'pack_sale_decline'],
     ['GET',  '/history',                   'player_history'],
 ];
 

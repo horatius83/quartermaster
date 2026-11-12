@@ -179,11 +179,111 @@ function player_pack(): void
           ORDER BY COALESCE(c.decided_at, c.submitted_at) DESC LIMIT 8",
         [$char['id']]
     );
+    $rows = inventory_rows((int)$char['id']);
+    $offered = offered_quantities((int)$char['id']);
+    foreach ($rows as &$r) {
+        $r['sellable'] = max(0, (int)$r['quantity'] - ($offered[stack_key((int)$r['item_id'], $r['notes'])] ?? 0));
+    }
+    unset($r);
+    $mine = 'sa.character_id = ? AND ';
     page('player/pack', [
         'active'  => 'pack',
         'char'    => $char,
-        'rows'    => inventory_rows((int)$char['id']),
+        'rows'    => $rows,
         'carried' => carried_weight((int)$char['id']),
         'orders'  => array_map(fn($o) => cart_detail((int)$o['id']), $orders),
+        'offers'  => sale_list($mine . "sa.status IN ('countered','pending')", [$char['id']], "CASE sa.status WHEN 'countered' THEN 0 ELSE 1 END, sa.created_at"),
+        'sold'    => sale_list($mine . "sa.status IN ('sold','rejected','declined')", [$char['id']], 'sa.decided_at DESC', 8),
     ], 'My pack');
+}
+
+/** Back to the pack with a message; player sale forms are plain (boosted) forms, so the whole page redraws. */
+function back_to_pack(string $message, string $kind = 'ok'): never
+{
+    flash($message, $kind);
+    redirect('/pack');
+}
+
+/** One of the player's own sales, or back to the pack if it's someone else's or gone. */
+function player_sale(array $char, int $saleId): array
+{
+    $sale = sale_detail($saleId);
+    if (!$sale || (int)$sale['character_id'] !== (int)$char['id']) {
+        back_to_pack('That offer is gone.', 'error');
+    }
+    return $sale;
+}
+
+/** Offer some of a stack in the pack to the DM, at a price for the lot. */
+function pack_sell(int $rowId): void
+{
+    $char = require_player();
+    $row = inventory_row($rowId);
+    if (!$row || (int)$row['character_id'] !== (int)$char['id']) {
+        back_to_pack('That item is no longer in your pack.', 'error');
+    }
+    $qty = post_int('quantity', 1);
+    $price = parse_price(post_str('price', 40));
+    if ($price === null || $price <= 0 || $price > MAX_SALE_CP) {
+        back_to_pack('Name your price, like “8 gp” or “1 gp 5 sp”.', 'error');
+    }
+    try {
+        transaction(function () use ($char, $row, $rowId, $qty, $price) {
+            // Lock the stack first, so two offers sent at once can't both count the same items as free.
+            $held = q_val('SELECT quantity FROM inventory WHERE id = ?' . for_update(), [$rowId]);
+            if ($held === null) {
+                throw new RuntimeException('That item is no longer in your pack.');
+            }
+            $free = (int)$held - (offered_quantities((int)$char['id'])[stack_key((int)$row['item_id'], $row['notes'])] ?? 0);
+            if ($free <= 0) {
+                throw new RuntimeException("All your {$row['name']} are already on offer.");
+            }
+            if ($qty < 1 || $qty > $free) {
+                throw new RuntimeException($free === 1 ? "You can offer 1 {$row['name']}." : "You can offer 1 to {$free} × {$row['name']}.");
+            }
+            q(
+                "INSERT INTO sales (character_id, item_id, notes, quantity, asking_cp, status, player_note, created_at)
+                 VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                [$char['id'], $row['item_id'], $row['notes'], $qty, $price, post_str('player_note', 500), now()]
+            );
+        });
+    } catch (RuntimeException $e) {
+        back_to_pack($e->getMessage(), 'error');
+    }
+    back_to_pack("Offered {$qty} × {$row['name']} to your DM for " . coins($price) . '. Nothing leaves your pack until it’s sold.');
+}
+
+/** Take back an offer the DM hasn't answered yet. */
+function pack_sale_withdraw(int $saleId): void
+{
+    $char = require_player();
+    $sale = player_sale($char, $saleId);
+    if (!q("DELETE FROM sales WHERE id = ? AND status = 'pending'", [$saleId])->rowCount()) {
+        back_to_pack('Your DM has already answered that offer.', 'error');
+    }
+    back_to_pack("Withdrew your offer for the {$sale['name']}.");
+}
+
+/** Take the DM's counter-offer: the sale goes through at their price. */
+function pack_sale_accept(int $saleId): void
+{
+    $char = require_player();
+    $sale = player_sale($char, $saleId);
+    try {
+        settle_sale($saleId, byPlayer: true, seenPrice: post_int('offer_cp', -1));
+    } catch (RuntimeException $e) {
+        back_to_pack($sale['status'] === 'countered' ? $e->getMessage() : 'That counter-offer has been withdrawn or already settled.', 'error');
+    }
+    back_to_pack("Sold {$sale['quantity']} × {$sale['name']} for " . coins(post_int('offer_cp')) . '.');
+}
+
+/** Turn down the DM's counter-offer; the items stay in the pack. */
+function pack_sale_decline(int $saleId): void
+{
+    $char = require_player();
+    $sale = player_sale($char, $saleId);
+    if (!q("UPDATE sales SET status = 'declined', decided_at = ? WHERE id = ? AND status = 'countered'", [now(), $saleId])->rowCount()) {
+        back_to_pack('That counter-offer has been withdrawn or already settled.', 'error');
+    }
+    back_to_pack("Turned down the offer for the {$sale['name']}. It stays in your pack.");
 }

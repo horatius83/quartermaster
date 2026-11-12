@@ -79,7 +79,7 @@ function dm_cart_approve(int $cartId): void
     $cart = cart_detail($cartId);
     toast("Approved. {$cart['character_name']} paid " . coins($cart['total_cp']) . '.');
     echo render('partials/cart_card', ['cart' => $cart]);
-    echo render('partials/cart_badge_oob', []);
+    echo render('partials/badge_oob', ['id' => 'cart-badge', 'count' => pending_cart_count()]);
     exit;
 }
 
@@ -91,7 +91,7 @@ function dm_cart_decline(int $cartId): void
     $cart = cart_detail($cartId);
     toast("Declined {$cart['character_name']}’s cart.");
     echo render('partials/cart_card', ['cart' => $cart]);
-    echo render('partials/cart_badge_oob', []);
+    echo render('partials/badge_oob', ['id' => 'cart-badge', 'count' => pending_cart_count()]);
     exit;
 }
 

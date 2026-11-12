@@ -154,6 +154,30 @@ CREATE TABLE cart_items (
   CONSTRAINT fk_cart_items_item FOREIGN KEY (item_id) REFERENCES items(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- A player's offer to sell a stack from their pack (character + item + notes, as add_to_inventory stacks them).
+-- pending waits on the DM; countered waits on the player, at offer_cp. Coin and items only move when it is sold:
+-- at offer_cp when the player accepts the counter-offer, at asking_cp when the DM accepts, recorded in sold_cp.
+-- All prices are for the whole lot, not each.
+CREATE TABLE sales (
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  character_id INT UNSIGNED NOT NULL,
+  item_id      INT UNSIGNED NOT NULL,
+  notes        VARCHAR(255) NOT NULL DEFAULT '',
+  quantity     INT NOT NULL DEFAULT 1,
+  asking_cp    INT NOT NULL DEFAULT 0,
+  offer_cp     INT NULL,
+  sold_cp      INT NULL,
+  status       ENUM('pending','countered','sold','rejected','declined') NOT NULL DEFAULT 'pending',
+  player_note  VARCHAR(500) NOT NULL DEFAULT '',
+  dm_note      VARCHAR(500) NOT NULL DEFAULT '',
+  created_at   DATETIME NOT NULL,
+  countered_at DATETIME NULL,
+  decided_at   DATETIME NULL,
+  KEY ix_sales_character (character_id, status),
+  CONSTRAINT fk_sales_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sales_item FOREIGN KEY (item_id) REFERENCES items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (
