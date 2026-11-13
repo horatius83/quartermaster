@@ -2,8 +2,8 @@
 
 A small web app for running a tabletop RPG's economy. The DM keeps every player's pack and purse, opens shops with their own stock, and approves what players put in their carts.
 
-- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system, approve or decline carts, and review the history of every pack and purse.
-- **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, and see their own pack and its history.
+- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system, approve or decline carts, accept, counter or reject players' offers to sell, and review the history of every pack and purse.
+- **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, offer things from their pack for sale, and see their own pack and its history.
 - **Admin:** load each system's SRD gear and magic items into its catalog from the dashboard, add and delete DMs and other logins, and read the account log of every login added or deleted.
 
 Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals). htmx and the fonts are served from `public/assets`, so pages load nothing from other sites. Their licences are alongside them, and they need to stay deployed with them.
@@ -20,6 +20,16 @@ Coin only changes hands when the DM approves a cart. Approving a cart:
 4. stacks the items into the character's pack.
 
 All four steps happen in one transaction.
+
+## Selling from a pack
+
+Players sell from *My pack*: *Sell…* on a row asks how many and an asking price for the lot (the catalog's price for one is shown as a guide), with an optional note. The offer goes to the DM under *Sale offers*, with a badge in the sidebar, and nothing leaves the pack until it's sold. Items already on offer can't be offered again, and a player can withdraw an offer until the DM answers it. The DM can:
+
+- **accept** the asking price, which takes the items from the pack and pays the coin into the purse, in one transaction. This works after a counter-offer too, for a DM who changes their mind;
+- **counter-offer** another price, with a note. The offer goes back to the player, whose *My pack* link shows a badge until they answer. They accept (and the sale goes through at the DM's price) or declines (and keeps the items). Until they answer, the DM can change the counter-offer or take it back. If it changes while the player has the old one open, their *Accept* is refused rather than taking the new price unseen;
+- **reject** it, with a note the player sees. The items stay in the pack.
+
+A sale only goes through if the pack still holds the items, so a DM who has meanwhile removed or moved them is told to reject the offer instead. Sales are written to the pack history as *Sold*, one entry for the items and one for the coin, like purchases. Sold items leave the game; they don't go onto a shop's shelves. An open offer keeps its item in the catalog; once every offer for an item is settled, deleting the item from the catalog deletes those offers too, and the pack history still shows the sales.
 
 ## Campaigns
 
@@ -76,8 +86,9 @@ Older databases are brought up to date automatically on the first request after 
 - **005, item tags:** adds the table for the tags DMs put on catalog items. Safe to run again.
 - **006, rulesets:** gives items and campaigns a system and makes item names unique per system. Everything existing starts as 5e.
 - **007, system choice:** lets each existing campaign set its real system once, under *Campaigns*, which copies the items that campaign uses (in its packs, on its shelves, in its carts and its history) into that system and moves the campaign to the copies. Catalog items it doesn't use stay 5e only, so re-add any you want. The 5e originals stay for campaigns that really are 5e; if none are, delete the leftovers from a 5e campaign's catalog should you ever start one. A name the chosen system already has means that item, so a pack holding it takes on that item's weight and description.
+- **008, sales:** adds the table for players' offers to sell from their packs. Safe to run again.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006 and 007 only once each: unlike 001 and 005, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006 and 007 only once each: unlike 001, 005 and 008, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
@@ -106,7 +117,7 @@ Open http://localhost:8000. The demo logins are `admin` / `quartermaster`, `dm` 
 
 ## End-to-end tests
 
-[Playwright](https://playwright.dev) drives the app in Chromium and Firefox to catch regressions: signing in and who can see what, the DM's pack editing, buying through a cart, pack history, and keeping campaigns apart. Node is only needed for the tests; the app itself doesn't use it.
+[Playwright](https://playwright.dev) drives the app in Chromium and Firefox to catch regressions: signing in and who can see what, the DM's pack editing, buying through a cart, selling from a pack, pack history, and keeping campaigns apart. Node is only needed for the tests; the app itself doesn't use it.
 
 ```bash
 npm install
@@ -118,7 +129,7 @@ npm test
 
 The tests start PHP's built-in server on port 8099 (`QM_E2E_PORT` moves it) with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite files in `/dev/shm` (memory-backed storage, so writes don't wait on the disk), or in the system temp folder where there's no `/dev/shm`. Your `app/config.php` and database are never touched. The demo seed is built once per run, and every test starts from a fresh copy of it, made by the test server's `/__test/reset` route (`tests/e2e/router.php`). Four workers run tests side by side (`QM_E2E_WORKERS` changes how many), each with a database of its own (`tests/e2e/test-db.php`), named by the server's port as well, so runs on different ports never share files. Requests that don't name their worker's database are refused rather than given another's. The test config hashes passwords at bcrypt's lowest cost, since PHP's default takes about 0.2 s per hash. Outside CI, a server already listening on the port is reused; if it is one left over from an older checkout, without the test routes, the run stops straight away and says so.
 
-Those tests all use SQLite. `npm run test:mysql` checks the item tags and rulesets upgrades, the tags table and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
+Those tests all use SQLite. `npm run test:mysql` checks the item tags, rulesets and sales upgrades, the tags table, settling a sale and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
 
 PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. With WSL's default networking, Windows reaches that server through a relay, and the odd browser request can fail with `net::ERR_ADDRESS_IN_USE`. Setting `networkingMode=mirrored` under `[wsl2]` in `%USERPROFILE%\.wslconfig`, then running `wsl --shutdown`, removes the relay. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
 
@@ -128,13 +139,13 @@ PHP is found in this order: the `PHP` environment variable (the path to `php`), 
 public/            web root: index.php (routes), .htaccess, assets/ (CSS, JS, htmx, fonts)
 app/bootstrap.php  loads config, libraries and handlers
 app/lib/           db (PDO helpers), auth (sessions, CSRF), money, router, shared queries
-app/handlers/      one file per area: auth, campaigns, party, inventory, stores, catalog, carts, player
+app/handlers/      one file per area: auth, campaigns, party, inventory, stores, catalog, carts, sales, player
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 app/data/          the SRD gear and magic items each system can load; their licence notices are in public/assets/srd-notices.txt
 scripts/           seed-demo.php, dev-router.php
 tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
-tests/mysql/       checks of item tags, rulesets and the SRD data against real MySQL and MariaDB (npm run test:mysql)
+tests/mysql/       checks of item tags, rulesets, sales and the SRD data against real MySQL and MariaDB (npm run test:mysql)
 ```
 
 ## How htmx is used
@@ -154,6 +165,7 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | Add to cart, ± in cart, submit, withdraw | `POST /shop/…` | the cart panel |
 | Pack history “Show older” | `GET /dm/history?before=…`, `GET /history?before=…` | replaces the button row with the next 50 entries |
 | Approve / decline / adjust cart | `POST /dm/carts/…` | that cart card, plus the sidebar badge |
+| Accept / counter / reject an offer to sell | `POST /dm/sales/…` | that offer's card, plus the sidebar badge |
 
 A catalog row posts all its fields when one changes, so a row showing old values would save them over newer ones. Four things keep rows current: Back and Forward reload the page from the server (`hx-history="false"`), a row locks while it saves, all rows lock while the table redraws (`hx-disabled-elt`), and a redraw waits for saves in flight (`public/assets/app.js`). Don't use `hx-sync` with `queue` for this: htmx silently drops a queued request once the response before it has replaced its element. The shop also opts out of history snapshots, because they'd show an old cart and old stock counts.
 
@@ -166,4 +178,4 @@ Messages are sent as an `HX-Trigger: {"qm-toast": …}` header and shown by `pub
 - Every POST is CSRF-checked.
 - All SQL uses prepared statements.
 - All output is escaped with `e()`.
-- Players can only see their own pack, history and carts, and only the stores the DM has opened to them.
+- Players can only see their own pack, history, carts and offers to sell, and only the stores the DM has opened to them.

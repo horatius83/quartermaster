@@ -25,6 +25,7 @@ function dm_dashboard(): void
         'active'     => 'dashboard',
         'characters' => $characters,
         'pending'    => $pending,
+        'sales'      => sale_list("sa.status = 'pending'"),
         'stores'     => $stores,
         'openStores' => count(array_filter($stores, fn($s) => (int)$s['is_open'] === 1)),
         'partyCoin'  => $partyCoin,

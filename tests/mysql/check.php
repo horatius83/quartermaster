@@ -1,19 +1,20 @@
 <?php
-// Checks item tags and rulesets against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that upgrades
-// 005 and 006 run, that 006 finishes if interrupted, and that the tag column stores, sorts and cascades the way the app
-// relies on. Run by tests/mysql/run.mjs.
+// Checks item tags, rulesets and sales against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
+// upgrades 005, 006 and 008 run, that 006 finishes if interrupted, that the tag column stores, sorts and cascades the way
+// the app relies on, and that a sale settles under MySQL's row locks. Run by tests/mysql/run.mjs.
 declare(strict_types=1);
 
 putenv('QM_CONFIG=' . __DIR__ . '/config.php');
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $cfg = (require __DIR__ . '/config.php')['mysql'];
 
-// Build the current schema, then undo upgrades 006 and 005: a database from just before them.
+// Build the current schema, then undo upgrades 008, 006 and 005: a database from just before them.
 $raw = new PDO("mysql:host={$cfg['host']};dbname={$cfg['database']};charset=utf8mb4", $cfg['username'], $cfg['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $schema = preg_replace('/^\s*--.*$/m', '', file_get_contents(__DIR__ . '/../../app/sql/schema.mysql.sql'));
 foreach (array_filter(array_map('trim', explode(';', $schema))) as $statement) {
     $raw->exec($statement);
 }
+$raw->exec('DROP TABLE sales');
 $raw->exec('DROP TABLE item_tags');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');
 $raw->exec("INSERT INTO campaigns (name, created_at) VALUES ('Older campaign', '2026-01-01 00:00:00')");
@@ -30,6 +31,7 @@ $check = function (string $what, mixed $expected, mixed $actual) use (&$failures
 $tagsOf = fn(int $id) => with_item_tags([['id' => $id]])[0]['tags'];
 
 $check('upgrade 005 created the table', 0, (int)q_val('SELECT COUNT(*) FROM item_tags'));
+$check('upgrade 008 created the sales table', 0, (int)q_val('SELECT COUNT(*) FROM sales'));
 $indexes = fn() => array_column(q_all("SHOW INDEX FROM items WHERE Key_name LIKE 'uq_items%'"), 'Key_name');
 $check('upgrade 006 made names unique per ruleset', ['uq_items_ruleset_name', 'uq_items_ruleset_name'], $indexes());
 $check('upgrade 006 gave campaigns a ruleset', 'ruleset', q_one('SHOW COLUMNS FROM campaigns WHERE Field = ?', ['ruleset'])['Field'] ?? null);
@@ -129,22 +131,46 @@ $addHolder = function (int $campaignId) use ($held): array {
     q('INSERT INTO inventory (character_id, item_id, quantity) VALUES (?, ?, 1)', [$character, $held['id']]);
     q('INSERT INTO store_stock (store_id, item_id, price_cp) VALUES (?, ?, 700)', [$store, $held['id']]);
     q('INSERT INTO cart_items (cart_id, item_id, quantity, unit_price_cp) VALUES (?, ?, 1, 700)', [$cart, $held['id']]);
-    return [$character, $store, $cart];
+    $sale = insert('INSERT INTO sales (character_id, item_id, quantity, asking_cp, created_at) VALUES (?, ?, 1, 300, ?)', [$character, $held['id'], now()]);
+    return [$character, $store, $cart, $sale];
 };
-[$olderCharacter, $olderStore, $olderCart] = $addHolder((int)$older['id']);
+[$olderCharacter, $olderStore, $olderCart, $olderSale] = $addHolder((int)$older['id']);
 [$otherCharacter] = $addHolder($other);
 create_item('Unheld lamp', (int)categories()[0]['id'], 1, 10, '', '5e');
 transaction(fn() => settle_campaign_system($older, '3.5e'));
 $check('only what the campaign uses is copied', null, item_by_name('Unheld lamp', '3.5e'));
 $copy = item_by_name('Held sword', '3.5e');
 $check('setting a system copies the item, with its details and tags', [3.0, 700, 'Notched.', ['martial']], [(float)$copy['weight'], (int)$copy['price_cp'], $copy['description'], $tagsOf((int)$copy['id'])]);
-$check('its pack, shelf and cart move to the copy', array_fill(0, 3, (int)$copy['id']), [
+$check('its pack, shelf, cart and sale move to the copy', array_fill(0, 4, (int)$copy['id']), [
     (int)q_val('SELECT item_id FROM inventory WHERE character_id = ?', [$olderCharacter]),
     (int)q_val('SELECT item_id FROM store_stock WHERE store_id = ?', [$olderStore]),
     (int)q_val('SELECT item_id FROM cart_items WHERE cart_id = ?', [$olderCart]),
+    (int)q_val('SELECT item_id FROM sales WHERE id = ?', [$olderSale]),
 ]);
 $check('another campaign keeps the original', (int)$held['id'], (int)q_val('SELECT item_id FROM inventory WHERE character_id = ?', [$otherCharacter]));
 $check('the campaign is locked to the new system', ['3.5e', 0], array_values(array_map(fn($v) => is_numeric($v) ? (int)$v : $v, q_one('SELECT ruleset, ruleset_open FROM campaigns WHERE id = ?', [$older['id']]))));
+
+// Selling part of a stack at the DM's counter-offer, with the row locks MySQL takes and SQLite doesn't.
+$seller = insert('INSERT INTO characters (campaign_id, name, coin_cp, created_at) VALUES (?, ?, 100, ?)', [$other, 'Seller', now()]);
+q('INSERT INTO inventory (character_id, item_id, quantity) VALUES (?, ?, 3)', [$seller, $held['id']]);
+$sale = insert(
+    "INSERT INTO sales (character_id, item_id, quantity, asking_cp, offer_cp, status, created_at) VALUES (?, ?, 2, 1000, 900, 'countered', ?)",
+    [$seller, $held['id'], now()]
+);
+settle_sale($sale, byPlayer: true, seenPrice: 900);
+$check('a sale takes the items, pays the purse and logs both', [1, 1000, 'sold', 900, 2], [
+    (int)q_val('SELECT quantity FROM inventory WHERE character_id = ?', [$seller]),
+    (int)q_val('SELECT coin_cp FROM characters WHERE id = ?', [$seller]),
+    q_val('SELECT status FROM sales WHERE id = ?', [$sale]),
+    (int)q_val('SELECT sold_cp FROM sales WHERE id = ?', [$sale]),
+    (int)q_val("SELECT COUNT(*) FROM inventory_log WHERE character_id = ? AND action = 'sell'", [$seller]),
+]);
+try {
+    settle_sale($sale, byPlayer: true, seenPrice: 900);
+    $check('a sale can only be settled once', true, false);
+} catch (RuntimeException) {
+    $check('a sale can only be settled once', true, true);
+}
 
 $secondPage = catalog_page('', '', [], 2);
 $check('a catalog page holds one page of items', [CATALOG_PAGE_SIZE, 2, CATALOG_PAGE_SIZE + 1], [count($secondPage['items']), $secondPage['page'], $secondPage['first']]);

@@ -8,6 +8,7 @@ $labels = [
     'move_out' => 'Handed over',
     'move_in'  => 'Received',
     'purchase' => 'Bought',
+    'sell'     => 'Sold',
     'coin'     => 'Purse changed',
 ];
 foreach ($rows as $l):

@@ -67,6 +67,21 @@
         <?php endforeach; ?>
       </section>
 
+      <?php if ($sales): ?>
+      <section class="card-stack" aria-labelledby="sales-h">
+        <h2 id="sales-h" class="section-title">Offers to sell</h2>
+        <?php foreach ($sales as $sale): ?>
+          <a class="card card-dashed row-between" style="text-decoration:none;color:inherit" href="<?= e(url('/dm/sales')) ?>">
+            <span>
+              <strong style="font-size:20px"><?= e($sale['character_name']) ?></strong><br>
+              <span class="muted small"><?= (int)$sale['quantity'] ?> × <?= e($sale['name']) ?> · <?= e(time_ago($sale['created_at'])) ?></span>
+            </span>
+            <span class="price"><?= e(coins((int)$sale['asking_cp'])) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </section>
+      <?php endif; ?>
+
       <section class="card-stack" aria-labelledby="stores-h">
         <h2 id="stores-h" class="section-title">Stores</h2>
         <?php if (!$stores): ?><p class="muted" style="margin:0">No stores yet. <a href="<?= e(url('/dm/stores')) ?>">Open one</a>.</p><?php else: ?>

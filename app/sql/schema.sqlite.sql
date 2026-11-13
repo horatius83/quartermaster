@@ -124,6 +124,28 @@ CREATE TABLE cart_items (
   UNIQUE (cart_id, item_id)
 );
 
+-- A player's offer to sell a stack from their pack (character + item + notes, as add_to_inventory stacks them).
+-- pending waits on the DM; countered waits on the player, at offer_cp. Coin and items only move when it is sold:
+-- at offer_cp when the player accepts the counter-offer, at asking_cp when the DM accepts, recorded in sold_cp.
+-- All prices are for the whole lot, not each.
+CREATE TABLE sales (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  item_id      INTEGER NOT NULL REFERENCES items(id),
+  notes        TEXT NOT NULL DEFAULT '',
+  quantity     INTEGER NOT NULL DEFAULT 1,
+  asking_cp    INTEGER NOT NULL DEFAULT 0,
+  offer_cp     INTEGER NULL,
+  sold_cp      INTEGER NULL,
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','countered','sold','rejected','declined')),
+  player_note  TEXT NOT NULL DEFAULT '',
+  dm_note      TEXT NOT NULL DEFAULT '',
+  created_at   TEXT NOT NULL,
+  countered_at TEXT NULL,
+  decided_at   TEXT NULL
+);
+CREATE INDEX ix_sales_character ON sales (character_id, status);
+
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (
