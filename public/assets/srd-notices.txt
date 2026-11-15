@@ -15,11 +15,11 @@ descriptions. Long magic item descriptions were shortened, and magic items the S
 by rarity.
 
 
-SYSTEM REFERENCE DOCUMENT (the 3.5e items)
-==========================================
+SYSTEM REFERENCE DOCUMENT (the 3.5e items and spells)
+=====================================================
 
-The whole of app/data/srd-3.5e.php and app/data/srd-3.5e-magic.php is Open Game Content, used under the license
-below. Neither declares Product Identity of its own. Quartermaster is not affiliated with or endorsed by Wizards of the Coast.
+The whole of app/data/srd-3.5e.php, app/data/srd-3.5e-magic.php and app/data/srd-3.5e-spells.php is Open Game Content,
+used under the license below. None of them declares Product Identity of its own. Quartermaster is not affiliated with or endorsed by Wizards of the Coast.
 
 
 OPEN GAME LICENSE Version 1.0a

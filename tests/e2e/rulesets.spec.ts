@@ -55,6 +55,29 @@ test.describe('a DM with campaigns in two systems', () => {
     await signInAsDm(page);
   });
 
+  test('a 3.5e scroll’s notes suggest the spells of its level, with the lists that have them there', async ({ page }) => {
+    await startCampaign(page, 'Old School', '3.5e');
+    await page.goto('/dm/stores');
+    await page.getByLabel('New store name').fill('The Scriptorium');
+    await page.getByRole('button', { name: '+ Open a new store' }).click();
+    await expect(page.getByRole('heading', { name: 'The Scriptorium' })).toBeVisible();
+    const form = page.locator('#stock-form');
+    const notes = form.getByRole('combobox', { name: 'Notes' });
+    const spells = form.getByRole('listbox', { name: 'Spells' });
+    await form.getByLabel('Stock an item').fill('Scroll, 1st-level spell');
+    await notes.pressSequentially('cure');
+    // A ranger casts cure light wounds at 2nd level, so it isn't listed for one here; 3.5e has no casting a lower spell higher.
+    await expect(spells.getByRole('option')).toHaveText([
+      /Cure Light Wounds\s*Brd, Clr, Drd, Pal, Healing domain/,
+      /Obscure Object\s*Brd/,
+    ]);
+    await notes.press('Escape');
+    await form.getByLabel('Stock an item').fill('Scroll, 2nd-level spell');
+    await notes.focus();
+    await notes.press('ArrowDown');
+    await expect(spells.getByRole('option', { name: /Cure Light Wounds/ })).toContainText('Rgr');
+  });
+
   test('a campaign sees only its own system’s items and tags, wherever it looks', async ({ page }) => {
     await startCampaign(page, 'Old School', '3.5e');
     await addItem(page, 'Old lantern');

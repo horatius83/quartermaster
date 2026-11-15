@@ -520,9 +520,20 @@ function spell_level_name(int $level): string
 }
 
 /**
+ * The systems whose scroll of a level can also hold a lower-level spell, cast at the scroll's level (5e's spell
+ * scrolls). In the others a scroll's level is its spell's.
+ */
+const SCROLL_HOLDS_LOWER_SPELLS = ['5e'];
+
+/**
  * The SRD spells a scroll of $level (as scroll_level() gives it) can hold whose names contain $search, as [name, note]
- * pairs. A scroll of a level holds a spell of that level, or a lower one cast at it, so those come first and the lower
- * ones after; cantrips go only on cantrip scrolls. Systems without a spell list get none.
+ * pairs: those of its level first, then (where SCROLL_HOLDS_LOWER_SPELLS) lower ones from the highest down, A–Z within
+ * each. Cantrips and 0-level spells go only on 0-level scrolls, and a scroll whose name gives no level gets any spell,
+ * lowest level first. Systems without a spell list get none.
+ *
+ * A system's spells are in app/data/srd-<system>-spells.php, by level. Each level lists its spells as names, or, where
+ * a spell's level depends on who casts it (3.5e), as name => the class and domain lists that have it at that level.
+ * The note says which, or gives the level when the lists don't.
  */
 function spell_suggestions(string $ruleset, int $level, string $search): array
 {
@@ -530,35 +541,49 @@ function spell_suggestions(string $ruleset, int $level, string $search): array
     if (!in_array($ruleset, SRD_RULESETS, true) || !is_file($file) || $search === '') {
         return [];
     }
+    $lower = in_array($ruleset, SCROLL_HOLDS_LOWER_SPELLS, true);
     $needle = srd_name_key($search);
-    $found = [];
-    foreach (require $file as $spellLevel => $names) {
+    $found = []; // name => [spell level => lists]
+    foreach (require $file as $spellLevel => $spells) {
         $fits = match (true) {
-            $level < 0  => true,
-            $level === 0 => $spellLevel === 0,
-            default     => $spellLevel >= 1 && $spellLevel <= $level,
+            $level < 0                => true,
+            $level === 0 || !$lower   => $spellLevel === $level,
+            default                   => $spellLevel >= 1 && $spellLevel <= $level,
         };
         if (!$fits) {
             continue;
         }
-        foreach ($names as $name) {
+        foreach ($spells as $key => $value) {
+            [$name, $lists] = is_int($key) ? [$value, []] : [$key, $value];
             if (str_contains(srd_name_key($name), $needle)) {
-                $found[] = [$spellLevel, $name];
+                $found[$name][$spellLevel] = $lists;
             }
         }
     }
-    // The scroll's own level first, then the lower ones from highest down (any level, lowest first, for a scroll whose
-    // name gives none); A–Z within each.
-    $key = fn($f) => $level < 0 ? [$f[0], $f[1]] : [$f[0] !== $level, -$f[0], $f[1]];
-    usort($found, fn($a, $b) => $key($a) <=> $key($b));
-    return array_map(function ($f) use ($level) {
-        [$spellLevel, $name] = $f;
-        $note = $spellLevel === 0 ? 'Cantrip' : spell_level_name($spellLevel) . ' level';
-        if ($level > 0 && $spellLevel < $level) {
+    $rows = [];
+    foreach ($found as $name => $levels) {
+        ksort($levels);
+        $rows[] = ['name' => $name, 'level' => array_key_first($levels), 'levels' => $levels];
+    }
+    $key = fn($r) => $level < 0 ? [$r['level'], $r['name']] : [$r['level'] !== $level, -$r['level'], $r['name']];
+    usort($rows, fn($a, $b) => $key($a) <=> $key($b));
+    return array_map(function ($r) use ($level) {
+        $lists = [];
+        foreach ($r['levels'] as $spellLevel => $atLevel) {
+            // A scroll of a known level needs only who has the spell at it; with none known, say at which level.
+            foreach ($atLevel as $list) {
+                $lists[] = $level < 0 ? "{$list} {$spellLevel}" : $list;
+            }
+        }
+        if ($lists) {
+            return [$r['name'], implode(', ', $lists)];
+        }
+        $note = $r['level'] === 0 ? 'Cantrip' : spell_level_name($r['level']) . ' level';
+        if ($level > 0 && $r['level'] < $level) {
             $note .= ', cast at ' . spell_level_name($level);
         }
-        return [$name, $note];
-    }, $found);
+        return [$r['name'], $note];
+    }, $rows);
 }
 
 /**
