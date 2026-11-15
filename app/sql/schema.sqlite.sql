@@ -94,13 +94,16 @@ CREATE TABLE store_access (
   PRIMARY KEY (store_id, character_id)
 );
 
+-- A shelf line. The same item can be stocked more than once with different notes ("Spell: Magic Missile"),
+-- which go with it into carts and packs.
 CREATE TABLE store_stock (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   item_id  INTEGER NOT NULL REFERENCES items(id),
+  notes    TEXT NOT NULL DEFAULT '',
   price_cp INTEGER NOT NULL DEFAULT 0,
   quantity INTEGER NULL,
-  UNIQUE (store_id, item_id)
+  UNIQUE (store_id, item_id, notes)
 );
 
 CREATE TABLE carts (
@@ -119,9 +122,10 @@ CREATE TABLE cart_items (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   cart_id       INTEGER NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
   item_id       INTEGER NOT NULL REFERENCES items(id),
+  notes         TEXT NOT NULL DEFAULT '',
   quantity      INTEGER NOT NULL DEFAULT 1,
   unit_price_cp INTEGER NOT NULL DEFAULT 0,
-  UNIQUE (cart_id, item_id)
+  UNIQUE (cart_id, item_id, notes)
 );
 
 -- A player's offer to sell a stack from their pack (character + item + notes, as add_to_inventory stacks them).

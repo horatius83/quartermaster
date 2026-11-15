@@ -105,20 +105,46 @@ function dm_stock_add(int $storeId): void
     $price ??= (int)$item['price_cp'];
     $qtyText = post_str('quantity', 10);
     $qty = ($qtyText === '' || $qtyText === '∞') ? null : max(0, (int)$qtyText);
+    // The same item with other notes is a shelf line of its own: a level 1 scroll of each spell.
+    $notes = posted_stock_notes();
+    $label = named_with_notes($item['name'], $notes);
 
-    $existing = q_one('SELECT id FROM store_stock WHERE store_id = ? AND item_id = ?', [$storeId, $item['id']]);
+    $existing = q_one('SELECT id FROM store_stock WHERE store_id = ? AND item_id = ? AND notes = ?', [$storeId, $item['id'], $notes]);
     if ($existing) {
         q('UPDATE store_stock SET price_cp = ?, quantity = ? WHERE id = ?', [$price, $qty, $existing['id']]);
-        toast("Updated {$item['name']} on the shelf.");
+        toast("Updated {$label} on the shelf.");
     } else {
-        q('INSERT INTO store_stock (store_id, item_id, price_cp, quantity) VALUES (?, ?, ?, ?)', [$storeId, $item['id'], $price, $qty]);
-        toast("Stocked {$item['name']}.");
+        q('INSERT INTO store_stock (store_id, item_id, notes, price_cp, quantity) VALUES (?, ?, ?, ?, ?)', [$storeId, $item['id'], $notes, $price, $qty]);
+        toast("Stocked {$label}.");
     }
     header('HX-Trigger-After-Swap: ' . json_encode(['qm-reset' => ['form' => '#stock-form']]));
     fragment('partials/stock_body', ['stock' => store_stock_rows($storeId)]);
 }
 
-/** Inline edit of price / quantity on one shelf row. */
+/** Spells for the stock form's Notes, when the item being stocked is a spell scroll: those a scroll of its level can hold. */
+function dm_stock_spells(): void
+{
+    require_dm();
+    $level = scroll_level(get_str('item', 150));
+    if ($level === null) {
+        exit;
+    }
+    $spells = spell_suggestions(campaign_ruleset(), $level, get_str('notes', STOCK_NOTES_MAX));
+    foreach (array_slice($spells, 0, SPELL_SUGGEST_MAX) as [$name, $note]) {
+        // Picked, it fills Notes as it will be saved: with a straight apostrophe (see posted_stock_notes()).
+        echo '<li role="option" class="suggest-opt" aria-selected="false" data-value="' . e(str_replace('’', "'", $name)) . '">'
+            . '<span class="suggest-name">' . e($name) . '</span>'
+            . '<span class="suggest-meta">' . e($note) . '</span>'
+            . '</li>';
+    }
+    $more = count($spells) - SPELL_SUGGEST_MAX;
+    if ($more > 0) {
+        echo '<li class="suggest-foot" role="presentation">' . e($more . ' more ' . ($more === 1 ? 'fits' : 'fit') . '. Type more of the name to find it.') . '</li>';
+    }
+    exit;
+}
+
+/** Inline edit of notes / price / quantity on one shelf row. */
 function dm_stock_update(int $stockId): void
 {
     require_dm();
@@ -129,8 +155,46 @@ function dm_stock_update(int $stockId): void
     }
     $qtyText = post_str('quantity', 10);
     $qty = ($qtyText === '' || $qtyText === '∞') ? null : max(0, (int)$qtyText);
-    q('UPDATE store_stock SET price_cp = ?, quantity = ? WHERE id = ?', [$price, $qty, $stockId]);
-    toast("Saved {$row['name']}: " . coins($price) . ', ' . ($qty === null ? 'unlimited' : $qty . ' in stock') . '.');
+    // Rows drawn before notes existed post none; keep what the line has.
+    $notes = isset($_POST['notes']) ? posted_stock_notes() : $row['notes'];
+    $label = named_with_notes($row['name'], $notes);
+    try {
+        $dropped = transaction(function () use ($row, $stockId, $notes, $price, $qty, $label) {
+            if ($notes === $row['notes']) {
+                q('UPDATE store_stock SET price_cp = ?, quantity = ? WHERE id = ?', [$price, $qty, $stockId]);
+                return 0;
+            }
+            // New notes make it a different thing (another spell on the scroll), so carts don't follow it. Lock the
+            // carts holding the old line, so none is sent to the DM while this decides.
+            $holders = q_all(
+                "SELECT c.status FROM carts c JOIN cart_items ci ON ci.cart_id = c.id
+                  WHERE c.store_id = ? AND c.status IN ('open','submitted') AND ci.item_id = ? AND ci.notes = ?" . for_update(),
+                [$row['store_id'], $row['item_id'], $row['notes']]
+            );
+            if (in_array('submitted', array_column($holders, 'status'), true)) {
+                throw new RuntimeException('A cart waiting on you holds ' . named_with_notes($row['name'], $row['notes']) . '. Approve or decline it before changing the notes.');
+            }
+            if (q_val(
+                'SELECT 1 FROM store_stock WHERE store_id = ? AND item_id = ? AND notes = ? AND id <> ?',
+                [$row['store_id'], $row['item_id'], $notes, $stockId]
+            )) {
+                throw new RuntimeException("{$label} is already on the shelf.");
+            }
+            q('UPDATE store_stock SET notes = ?, price_cp = ?, quantity = ? WHERE id = ?', [$notes, $price, $qty, $stockId]);
+            // As when it's pulled from the shelf: open carts drop the old line, and their players add the new one if they want it.
+            return remove_from_open_carts((int)$row['store_id'], (int)$row['item_id'], $row['notes']);
+        });
+    } catch (PDOException $e) {
+        // Another save gave a line of this item the same notes just now. (Caught first: it's a RuntimeException too.)
+        if ($e->getCode() !== '23000') {
+            throw $e;
+        }
+        htmx_fail("{$label} is already on the shelf.");
+    } catch (RuntimeException $e) {
+        htmx_fail($e->getMessage());
+    }
+    toast("Saved {$label}: " . coins($price) . ', ' . ($qty === null ? 'unlimited' : $qty . ' in stock') . '.'
+        . ($dropped ? ' Taken out of ' . ($dropped === 1 ? 'an open cart' : "{$dropped} open carts") . '.' : ''));
     fragment('partials/stock_row', ['s' => stock_row($stockId)]);
 }
 
@@ -140,8 +204,8 @@ function dm_stock_delete(int $stockId): void
     $row = stock_row($stockId) ?? abort(404, 'That item is no longer stocked.');
     q('DELETE FROM store_stock WHERE id = ?', [$stockId]);
     // Drop it from any open carts too, so players can't buy it.
-    q("DELETE FROM cart_items WHERE item_id = ? AND cart_id IN (SELECT id FROM carts WHERE store_id = ? AND status = 'open')", [$row['item_id'], $row['store_id']]);
-    toast("Pulled {$row['name']} from the shelf.");
+    remove_from_open_carts((int)$row['store_id'], (int)$row['item_id'], $row['notes']);
+    toast('Pulled ' . named_with_notes($row['name'], $row['notes']) . ' from the shelf.');
     echo '';
     exit;
 }

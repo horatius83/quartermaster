@@ -1,6 +1,6 @@
 <?php
 // Checks item tags, rulesets and sales against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
-// upgrades 005, 006 and 008 run, that 006 finishes if interrupted, that the tag column stores, sorts and cascades the way
+// upgrades 005, 006, 008 and 009 run, that 006 and 009 finish if interrupted, that the tag column stores, sorts and cascades the way
 // the app relies on, and that a sale settles under MySQL's row locks. Run by tests/mysql/run.mjs.
 declare(strict_types=1);
 
@@ -8,12 +8,14 @@ putenv('QM_CONFIG=' . __DIR__ . '/config.php');
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $cfg = (require __DIR__ . '/config.php')['mysql'];
 
-// Build the current schema, then undo upgrades 008, 006 and 005: a database from just before them.
+// Build the current schema, then undo upgrades 009, 008, 006 and 005: a database from just before them.
 $raw = new PDO("mysql:host={$cfg['host']};dbname={$cfg['database']};charset=utf8mb4", $cfg['username'], $cfg['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $schema = preg_replace('/^\s*--.*$/m', '', file_get_contents(__DIR__ . '/../../app/sql/schema.mysql.sql'));
 foreach (array_filter(array_map('trim', explode(';', $schema))) as $statement) {
     $raw->exec($statement);
 }
+$raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
+$raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
 $raw->exec('DROP TABLE item_tags');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');
@@ -35,9 +37,26 @@ $check('upgrade 008 created the sales table', 0, (int)q_val('SELECT COUNT(*) FRO
 $indexes = fn() => array_column(q_all("SHOW INDEX FROM items WHERE Key_name LIKE 'uq_items%'"), 'Key_name');
 $check('upgrade 006 made names unique per ruleset', ['uq_items_ruleset_name', 'uq_items_ruleset_name'], $indexes());
 $check('upgrade 006 gave campaigns a ruleset', 'ruleset', q_one('SHOW COLUMNS FROM campaigns WHERE Field = ?', ['ruleset'])['Field'] ?? null);
+$uniqueOn = fn(string $table) => array_values(array_unique(array_column(q_all("SHOW INDEX FROM {$table} WHERE Non_unique = 0 AND Key_name <> 'PRIMARY'"), 'Key_name')));
+$check('upgrade 009 made shelf lines unique with their notes', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
+$check('upgrade 009 made cart lines unique with their notes', ['uq_cart_item_notes'], $uniqueOn('cart_items'));
+
+// Upgrade 009 stopped after its first table: the next run skips that one and does the other.
+$raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
+apply_upgrades(db());
+$check('an interrupted upgrade 009 is finished by the next run', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
+$check('finishing upgrade 009 leaves the cart lines as they were', ['uq_cart_item_notes'], $uniqueOn('cart_items'));
+// Older MySQL and COMPACT tables index at most 767 bytes of a column; the notes key has to fit.
+$raw->exec('ALTER TABLE store_stock ROW_FORMAT=COMPACT');
+$raw->exec('ALTER TABLE cart_items ROW_FORMAT=COMPACT');
+$check('the notes keys fit a COMPACT table', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
 
 // An upgrade that stopped just before its last statement: the probe fails, and the next run has to skip every
-// change that's already there, including the index it already dropped, then finish.
+// change that's already there, including the index it already dropped, then finish. The upgrades after it never
+// ran, so they're undone too (the app only looks further when the newest one is missing).
+$raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
+$raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
+$raw->exec('DROP TABLE sales');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');
 apply_upgrades(db());
 $check('an interrupted upgrade 006 is finished by the next run', 'ruleset', q_one('SHOW COLUMNS FROM campaigns WHERE Field = ?', ['ruleset'])['Field'] ?? null);
@@ -171,6 +190,18 @@ try {
 } catch (RuntimeException) {
     $check('a sale can only be settled once', true, true);
 }
+
+// Shelf notes match exactly, as in SQLite, and the longest the form allows fits.
+$scroll = (int)create_item('Check scroll', (int)categories()[0]['id'], 0, 100, ruleset: '5e')['id'];
+$shop = insert("INSERT INTO stores (campaign_id, name, created_at) VALUES ((SELECT MIN(id) FROM campaigns), 'Check shop', ?)", [now()]);
+$longestNotes = str_repeat('é', STOCK_NOTES_MAX);
+foreach (['Shield', 'shield', $longestNotes] as $notes) {
+    q('INSERT INTO store_stock (store_id, item_id, notes, price_cp) VALUES (?, ?, ?, 100)', [$shop, $scroll, $notes]);
+}
+$check('notes differing only in case are two shelf lines', 2, (int)q_val('SELECT COUNT(*) FROM store_stock WHERE store_id = ? AND notes = ?', [$shop, 'Shield']) + (int)q_val('SELECT COUNT(*) FROM store_stock WHERE store_id = ? AND notes = ?', [$shop, 'shield']));
+$check('the longest notes are kept whole', $longestNotes, q_val('SELECT notes FROM store_stock WHERE store_id = ? AND notes LIKE ?', [$shop, 'é%']));
+q('DELETE FROM stores WHERE id = ?', [$shop]);
+q('DELETE FROM items WHERE id = ?', [$scroll]);
 
 $secondPage = catalog_page('', '', [], 2);
 $check('a catalog page holds one page of items', [CATALOG_PAGE_SIZE, 2, CATALOG_PAGE_SIZE + 1], [count($secondPage['items']), $secondPage['page'], $secondPage['first']]);

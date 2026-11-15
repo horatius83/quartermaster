@@ -54,6 +54,15 @@
     <form id="stock-form" class="card card-dashed form-row"
           hx-post="<?= e(url('/dm/stores/' . $store['id'] . '/stock')) ?>" hx-target="#stock-body" hx-swap="outerHTML">
       <?= render('partials/item_suggest', ['id' => 'stock-item', 'label' => 'Stock an item', 'hint' => '(new names are added to the catalog)', 'placeholder' => 'Search the catalog…']) ?>
+      <?php // For a spell scroll, typing here suggests the spells a scroll of its level can hold (app.js handles the list, as for the item). ?>
+      <div class="field mid suggest">
+        <label for="stock-notes-input">Notes</label>
+        <input id="stock-notes-input" name="notes" maxlength="<?= STOCK_NOTES_MAX ?>" autocomplete="off" placeholder="optional, e.g. Magic Missile"
+               role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="stock-notes-suggest"
+               hx-get="<?= e(url('/dm/stock/spells')) ?>" hx-include="#stock-item-input" hx-trigger="input changed delay:250ms, qm-refresh delay:250ms"
+               hx-sync="this:replace" hx-target="#stock-notes-suggest" hx-swap="innerHTML">
+        <ul id="stock-notes-suggest" class="suggest-list" role="listbox" aria-label="Spells" hidden></ul>
+      </div>
       <label class="field tiny">Price <input name="price" placeholder="catalog"></label>
       <label class="field tiny">In stock <input name="quantity" placeholder="∞"></label>
       <label class="field mid">Category

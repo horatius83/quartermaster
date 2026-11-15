@@ -32,6 +32,7 @@ $filtered = function (string $cat, array $tags) use ($base): string {
       <article class="card ware">
         <?= category_tag($w['category'], $w['category_slug']) ?>
         <h2 class="card-title"><?= e($w['name']) ?></h2>
+        <?php if ($w['notes'] !== ''): ?><p class="muted" style="margin:-4px 0 0"><?= e($w['notes']) ?></p><?php endif; ?>
         <?php if ($w['tags']): ?>
         <div class="item-tags"><?php foreach ($w['tags'] as $tag): ?><span class="item-tag"><?= e($tag) ?></span><?php endforeach; ?></div>
         <?php endif; ?>
@@ -43,7 +44,7 @@ $filtered = function (string $cat, array $tags) use ($base): string {
           <span class="price"><?= e(coins((int)$w['price_cp'])) ?></span>
           <button class="btn btn-dark" type="button"<?= $soldOut ? ' disabled' : '' ?>
             hx-post="<?= e(url('/shop/' . $store['id'] . '/add')) ?>" hx-vals='{"stock_id": <?= (int)$w['id'] ?>}'
-            hx-target="#cart" hx-swap="outerHTML" aria-label="Add <?= e($w['name']) ?> to cart">Add to cart</button>
+            hx-target="#cart" hx-swap="outerHTML" aria-label="Add <?= e(named_with_notes($w['name'], $w['notes'])) ?> to cart">Add to cart</button>
         </div>
       </article>
     <?php endforeach; ?>

@@ -461,20 +461,20 @@ function store(int $id): ?array
 
 function store_stock_rows(int $storeId): array
 {
-    $sql = 'SELECT st.id, st.store_id, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
+    $sql = 'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
                    cat.name AS category, cat.slug AS category_slug
               FROM store_stock st
               JOIN items i ON i.id = st.item_id
               JOIN categories cat ON cat.id = i.category_id
              WHERE st.store_id = ?
-             ORDER BY cat.sort_order, i.name';
+             ORDER BY cat.sort_order, i.name, st.notes';
     return q_all($sql, [$storeId]);
 }
 
 function stock_row(int $id): ?array
 {
     return q_one(
-        'SELECT st.id, st.store_id, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
+        'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
                 cat.name AS category, cat.slug AS category_slug
            FROM store_stock st
            JOIN items i ON i.id = st.item_id
@@ -483,6 +483,101 @@ function stock_row(int $id): ?array
           WHERE st.id = ? AND s.campaign_id = ?',
         [$id, campaign_id()]
     );
+}
+
+/**
+ * Longest notes a shelf line takes. Shorter than a pack's 255, so the unique key over them fits MySQL's 767-byte
+ * index limit on older hosts (191 four-byte characters).
+ */
+const STOCK_NOTES_MAX = 191;
+
+/**
+ * The spell level of a spell scroll, from its name: "Spell scroll (3rd level)", "Scroll, 3rd-level spell",
+ * "Level 3 scroll" and "Scroll (lvl 3)" are 3, and a cantrip or 0-level scroll is 0. -1 is a scroll whose name gives
+ * no level; null is an item that isn't a scroll.
+ */
+function scroll_level(string $item): ?int
+{
+    if (!preg_match('/\bscroll\b(?! case)/i', $item)) {
+        return null;
+    }
+    if (preg_match('/\bcantrip\b|\b0(?:th)?[- ]?level\b|\b(?:level|lvl)\.?[- ]?0\b/i', $item)) {
+        return 0;
+    }
+    if (preg_match('/\b([1-9])(?:st|nd|rd|th)?[- ]?level\b|\b(?:level|lvl)\.?[- ]?([1-9])\b/i', $item, $m)) {
+        return (int)($m[1] !== '' ? $m[1] : $m[2]);
+    }
+    return -1;
+}
+
+/** How many spells the stock form's Notes lists at once; the list says how many more there are. */
+const SPELL_SUGGEST_MAX = 12;
+
+/** "1st", "2nd", "3rd", "4th"… for a spell level. */
+function spell_level_name(int $level): string
+{
+    return $level . match ($level) { 1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th' };
+}
+
+/**
+ * The SRD spells a scroll of $level (as scroll_level() gives it) can hold whose names contain $search, as [name, note]
+ * pairs. A scroll of a level holds a spell of that level, or a lower one cast at it, so those come first and the lower
+ * ones after; cantrips go only on cantrip scrolls. Systems without a spell list get none.
+ */
+function spell_suggestions(string $ruleset, int $level, string $search): array
+{
+    $file = APP_DIR . "/data/srd-{$ruleset}-spells.php";
+    if (!in_array($ruleset, SRD_RULESETS, true) || !is_file($file) || $search === '') {
+        return [];
+    }
+    $needle = srd_name_key($search);
+    $found = [];
+    foreach (require $file as $spellLevel => $names) {
+        $fits = match (true) {
+            $level < 0  => true,
+            $level === 0 => $spellLevel === 0,
+            default     => $spellLevel >= 1 && $spellLevel <= $level,
+        };
+        if (!$fits) {
+            continue;
+        }
+        foreach ($names as $name) {
+            if (str_contains(srd_name_key($name), $needle)) {
+                $found[] = [$spellLevel, $name];
+            }
+        }
+    }
+    // The scroll's own level first, then the lower ones from highest down (any level, lowest first, for a scroll whose
+    // name gives none); A–Z within each.
+    $key = fn($f) => $level < 0 ? [$f[0], $f[1]] : [$f[0] !== $level, -$f[0], $f[1]];
+    usort($found, fn($a, $b) => $key($a) <=> $key($b));
+    return array_map(function ($f) use ($level) {
+        [$spellLevel, $name] = $f;
+        $note = $spellLevel === 0 ? 'Cantrip' : spell_level_name($spellLevel) . ' level';
+        if ($level > 0 && $spellLevel < $level) {
+            $note .= ', cast at ' . spell_level_name($level);
+        }
+        return [$name, $note];
+    }, $found);
+}
+
+/**
+ * The notes posted for a shelf line, with curly quotes made straight. Notes match exactly, so without this a spell
+ * picked from the suggestions ("Hunter’s Mark") or typed on a phone would be a different line from the same spell
+ * typed on a keyboard ("Hunter's Mark").
+ */
+function posted_stock_notes(): string
+{
+    return str_replace(['‘', '’', '“', '”'], ["'", "'", '"', '"'], post_str('notes', STOCK_NOTES_MAX));
+}
+
+/** Take a shelf line out of the store's open carts, so players can't buy it. Returns how many lines went. */
+function remove_from_open_carts(int $storeId, int $itemId, string $notes): int
+{
+    return q(
+        "DELETE FROM cart_items WHERE item_id = ? AND notes = ? AND cart_id IN (SELECT id FROM carts WHERE store_id = ? AND status = 'open')",
+        [$itemId, $notes, $storeId]
+    )->rowCount();
 }
 
 /** Character ids allowed in a store; empty array = everyone. */
@@ -528,15 +623,15 @@ function cart_detail(int $cartId): ?array
         return null;
     }
     $cart['lines'] = q_all(
-        'SELECT ci.id, ci.item_id, ci.quantity, ci.unit_price_cp, i.name, i.weight,
+        'SELECT ci.id, ci.item_id, ci.notes, ci.quantity, ci.unit_price_cp, i.name, i.weight,
                 cat.name AS category, cat.slug AS category_slug,
                 st.quantity AS stock_left
            FROM cart_items ci
            JOIN items i ON i.id = ci.item_id
            JOIN categories cat ON cat.id = i.category_id
-           LEFT JOIN store_stock st ON st.store_id = ? AND st.item_id = ci.item_id
+           LEFT JOIN store_stock st ON st.store_id = ? AND st.item_id = ci.item_id AND st.notes = ci.notes
           WHERE ci.cart_id = ?
-          ORDER BY cat.sort_order, i.name',
+          ORDER BY cat.sort_order, i.name, ci.notes',
         [$cart['store_id'], $cartId]
     );
     $cart['total_cp'] = 0;

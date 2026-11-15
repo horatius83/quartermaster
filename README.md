@@ -17,9 +17,11 @@ Coin only changes hands when the DM approves a cart. Approving a cart:
 1. checks that the purse and the store's stock cover the cart,
 2. takes the coin,
 3. lowers the stock (a blank stock count means unlimited),
-4. stacks the items into the character's pack.
+4. stacks the items into the character's pack, with the notes their shelf line had.
 
 All four steps happen in one transaction.
+
+A shelf line can have notes (up to 191 characters), such as which spell a level 1 spell scroll holds. The same item can be stocked more than once with different notes, and players see the notes on the shelf, in their cart and in their pack. Notes match exactly, so "Shield" and "shield" are two lines. Curly quotes are saved straight, though, so "Hunter’s Mark" typed on a phone is the same line as "Hunter's Mark". New notes make a line a different thing, so changing them takes the line out of open carts, like pulling it from the shelf, and waits until any cart sent to the DM that holds it is approved or declined. For a 5e spell scroll (an item named like "Spell scroll (3rd level)" or "Level 3 scroll"), typing in the stock form's *Notes* suggests the SRD spells a scroll of its level can hold: that level's spells first, then lower ones cast at it (cantrip scrolls get cantrips). The other systems have no spell list yet, so their notes get no suggestions, and nor do notes edited on the shelf.
 
 ## Selling from a pack
 
@@ -87,8 +89,9 @@ Older databases are brought up to date automatically on the first request after 
 - **006, rulesets:** gives items and campaigns a system and makes item names unique per system. Everything existing starts as 5e.
 - **007, system choice:** lets each existing campaign set its real system once, under *Campaigns*, which copies the items that campaign uses (in its packs, on its shelves, in its carts and its history) into that system and moves the campaign to the copies. Catalog items it doesn't use stay 5e only, so re-add any you want. The 5e originals stay for campaigns that really are 5e; if none are, delete the leftovers from a 5e campaign's catalog should you ever start one. A name the chosen system already has means that item, so a pack holding it takes on that item's weight and description.
 - **008, sales:** adds the table for players' offers to sell from their packs. Safe to run again.
+- **009, stock notes:** gives shelf and cart lines notes, so a store can stock the same item more than once, each with its own notes (a level 1 spell scroll of each spell). Existing shelves and carts keep what they had, with no notes.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006 and 007 only once each: unlike 001, 005 and 008, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006, 007 and 009 only once each: unlike 001, 005 and 008, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
@@ -129,7 +132,7 @@ npm test
 
 The tests start PHP's built-in server on port 8099 (`QM_E2E_PORT` moves it) with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite files in `/dev/shm` (memory-backed storage, so writes don't wait on the disk), or in the system temp folder where there's no `/dev/shm`. Your `app/config.php` and database are never touched. The demo seed is built once per run, and every test starts from a fresh copy of it, made by the test server's `/__test/reset` route (`tests/e2e/router.php`). Four workers run tests side by side (`QM_E2E_WORKERS` changes how many), each with a database of its own (`tests/e2e/test-db.php`), named by the server's port as well, so runs on different ports never share files. Requests that don't name their worker's database are refused rather than given another's. The test config hashes passwords at bcrypt's lowest cost, since PHP's default takes about 0.2 s per hash. Outside CI, a server already listening on the port is reused; if it is one left over from an older checkout, without the test routes, the run stops straight away and says so.
 
-Those tests all use SQLite. `npm run test:mysql` checks the item tags, rulesets and sales upgrades, the tags table, settling a sale and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
+Those tests all use SQLite. `npm run test:mysql` checks the item tags, rulesets, sales and stock notes upgrades, the tags table, settling a sale and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
 
 PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. With WSL's default networking, Windows reaches that server through a relay, and the odd browser request can fail with `net::ERR_ADDRESS_IN_USE`. Setting `networkingMode=mirrored` under `[wsl2]` in `%USERPROFILE%\.wslconfig`, then running `wsl --shutdown`, removes the relay. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
 
@@ -142,7 +145,7 @@ app/lib/           db (PDO helpers), auth (sessions, CSRF), money, router, share
 app/handlers/      one file per area: auth, campaigns, party, inventory, stores, catalog, carts, sales, player
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
-app/data/          the SRD gear and magic items each system can load; their licence notices are in public/assets/srd-notices.txt
+app/data/          the SRD gear and magic items each system can load, and the 5e spells suggested for scrolls; their licence notices are in public/assets/srd-notices.txt
 scripts/           seed-demo.php, dev-router.php
 tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
 tests/mysql/       checks of item tags, rulesets, sales and the SRD data against real MySQL and MariaDB (npm run test:mysql)
@@ -160,7 +163,8 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | Tag filter chips | `GET /shop/{id}?tag[]=…`, `GET /dm/catalog?tag[]=…` | the wares or the table body, showing items with every chosen tag; the URL is pushed to history |
 | Give item / stock item | `POST …/give`, `…/stock` | the table body; the form resets |
 | Item name suggestions | `GET /dm/catalog/suggest` | the `<datalist>` options |
-| Inline price and stock edits | `POST` on `change` | that row |
+| Spell suggestions for a scroll's notes | `GET /dm/stock/spells` | the list under the stock form's *Notes* |
+| Inline notes, price and stock edits | `POST` on `change` | that row |
 | Inline catalog edits | `POST /dm/catalog/{id}` on `change` | that row, or the whole table if the edit takes it out of the filters; the tag filter fetches itself again if the tags in use changed |
 | Add to cart, ± in cart, submit, withdraw | `POST /shop/…` | the cart panel |
 | Pack history “Show older” | `GET /dm/history?before=…`, `GET /history?before=…` | replaces the button row with the next 50 entries |

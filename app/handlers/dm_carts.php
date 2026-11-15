@@ -52,21 +52,22 @@ function dm_cart_approve(int $cartId): void
                 throw new RuntimeException("{$char['name']} is short " . coins($total - (int)$char['coin_cp']) . '. Adjust the cart or their purse first.');
             }
             foreach ($lines as $l) {
+                $label = named_with_notes($l['name'], $l['notes']);
                 $stock = q_one(
-                    'SELECT id, quantity FROM store_stock WHERE store_id = ? AND item_id = ?' . for_update(),
-                    [$cart['store_id'], $l['item_id']]
+                    'SELECT id, quantity FROM store_stock WHERE store_id = ? AND item_id = ? AND notes = ?' . for_update(),
+                    [$cart['store_id'], $l['item_id'], $l['notes']]
                 );
                 if (!$stock) {
-                    throw new RuntimeException("{$l['name']} is no longer sold here. Set its quantity to 0 first.");
+                    throw new RuntimeException("{$label} is no longer sold here. Set its quantity to 0 first.");
                 }
                 if ($stock['quantity'] !== null) {
                     if ((int)$stock['quantity'] < (int)$l['quantity']) {
-                        throw new RuntimeException("Only {$stock['quantity']} × {$l['name']} left in stock.");
+                        throw new RuntimeException("Only {$stock['quantity']} × {$label} left in stock.");
                     }
                     q('UPDATE store_stock SET quantity = quantity - ? WHERE id = ?', [$l['quantity'], $stock['id']]);
                 }
-                add_to_inventory((int)$char['id'], (int)$l['item_id'], (int)$l['quantity']);
-                log_inventory((int)$char['id'], 'purchase', $l, (int)$l['quantity'], detail: 'Bought at ' . $storeName);
+                add_to_inventory((int)$char['id'], (int)$l['item_id'], (int)$l['quantity'], $l['notes']);
+                log_inventory((int)$char['id'], 'purchase', $l, (int)$l['quantity'], notes: $l['notes'], detail: 'Bought at ' . $storeName);
             }
             q('UPDATE characters SET coin_cp = coin_cp - ? WHERE id = ?', [$total, $char['id']]);
             log_inventory((int)$char['id'], 'purchase', coinCp: -$total, detail: 'Paid at ' . $storeName);

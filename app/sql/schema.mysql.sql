@@ -115,14 +115,17 @@ CREATE TABLE store_access (
   CONSTRAINT fk_access_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- quantity NULL = unlimited stock.
+-- A shelf line. The same item can be stocked more than once with different notes ("Spell: Magic Missile"),
+-- which go with it into carts and packs. Notes match exactly, as in SQLite, and are short enough for the unique key
+-- to fit older MySQL's 767-byte limit on an indexed column. quantity NULL = unlimited stock.
 CREATE TABLE store_stock (
   id       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   store_id INT UNSIGNED NOT NULL,
   item_id  INT UNSIGNED NOT NULL,
+  notes    VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
   price_cp INT NOT NULL DEFAULT 0,
   quantity INT NULL,
-  UNIQUE KEY uq_stock_store_item (store_id, item_id),
+  UNIQUE KEY uq_stock_store_item_notes (store_id, item_id, notes),
   CONSTRAINT fk_stock_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
   CONSTRAINT fk_stock_item FOREIGN KEY (item_id) REFERENCES items(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -147,9 +150,10 @@ CREATE TABLE cart_items (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   cart_id       INT UNSIGNED NOT NULL,
   item_id       INT UNSIGNED NOT NULL,
+  notes         VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
   quantity      INT NOT NULL DEFAULT 1,
   unit_price_cp INT NOT NULL DEFAULT 0,
-  UNIQUE KEY uq_cart_item (cart_id, item_id),
+  UNIQUE KEY uq_cart_item_notes (cart_id, item_id, notes),
   CONSTRAINT fk_cart_items_cart FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE CASCADE,
   CONSTRAINT fk_cart_items_item FOREIGN KEY (item_id) REFERENCES items(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
