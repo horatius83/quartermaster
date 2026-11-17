@@ -101,17 +101,21 @@ function shop_add(int $storeId): void
     if ($cart['status'] === 'submitted') {
         htmx_fail('Your cart is with the DM. Withdraw it to make changes.');
     }
-    $line = q_one('SELECT * FROM cart_items WHERE cart_id = ? AND item_id = ?', [$cart['id'], $stock['item_id']]);
+    $label = named_with_notes($stock['name'], $stock['notes']);
+    $line = q_one('SELECT * FROM cart_items WHERE cart_id = ? AND item_id = ? AND notes = ?', [$cart['id'], $stock['item_id'], $stock['notes']]);
     $newQty = ($line ? (int)$line['quantity'] : 0) + 1;
     if ($stock['quantity'] !== null && $newQty > (int)$stock['quantity']) {
-        htmx_fail("Only {$stock['quantity']} × {$stock['name']} in stock.");
+        htmx_fail("Only {$stock['quantity']} × {$label} in stock.");
     }
     if ($line) {
         q('UPDATE cart_items SET quantity = ?, unit_price_cp = ? WHERE id = ?', [$newQty, $stock['price_cp'], $line['id']]);
     } else {
-        q('INSERT INTO cart_items (cart_id, item_id, quantity, unit_price_cp) VALUES (?, ?, 1, ?)', [$cart['id'], $stock['item_id'], $stock['price_cp']]);
+        q(
+            'INSERT INTO cart_items (cart_id, item_id, notes, quantity, unit_price_cp) VALUES (?, ?, ?, 1, ?)',
+            [$cart['id'], $stock['item_id'], $stock['notes'], $stock['price_cp']]
+        );
     }
-    toast("Added {$stock['name']} to your cart.");
+    toast("Added {$label} to your cart.");
     cart_panel($char, $store);
 }
 
@@ -133,7 +137,10 @@ function shop_line_qty(int $lineId): void
     if ($newQty <= 0) {
         q('DELETE FROM cart_items WHERE id = ?', [$lineId]);
     } else {
-        $stock = q_one('SELECT quantity FROM store_stock WHERE store_id = ? AND item_id = ?', [$line['store_id'], $line['item_id']]);
+        $stock = q_one(
+            'SELECT quantity FROM store_stock WHERE store_id = ? AND item_id = ? AND notes = ?',
+            [$line['store_id'], $line['item_id'], $line['notes']]
+        );
         if ($stock && $stock['quantity'] !== null && $newQty > (int)$stock['quantity']) {
             htmx_fail("Only {$stock['quantity']} in stock.");
         }

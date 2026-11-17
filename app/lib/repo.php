@@ -461,20 +461,20 @@ function store(int $id): ?array
 
 function store_stock_rows(int $storeId): array
 {
-    $sql = 'SELECT st.id, st.store_id, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
+    $sql = 'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
                    cat.name AS category, cat.slug AS category_slug
               FROM store_stock st
               JOIN items i ON i.id = st.item_id
               JOIN categories cat ON cat.id = i.category_id
              WHERE st.store_id = ?
-             ORDER BY cat.sort_order, i.name';
+             ORDER BY cat.sort_order, i.name, st.notes';
     return q_all($sql, [$storeId]);
 }
 
 function stock_row(int $id): ?array
 {
     return q_one(
-        'SELECT st.id, st.store_id, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
+        'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
                 cat.name AS category, cat.slug AS category_slug
            FROM store_stock st
            JOIN items i ON i.id = st.item_id
@@ -483,6 +483,126 @@ function stock_row(int $id): ?array
           WHERE st.id = ? AND s.campaign_id = ?',
         [$id, campaign_id()]
     );
+}
+
+/**
+ * Longest notes a shelf line takes. Shorter than a pack's 255, so the unique key over them fits MySQL's 767-byte
+ * index limit on older hosts (191 four-byte characters).
+ */
+const STOCK_NOTES_MAX = 191;
+
+/**
+ * The spell level of a spell scroll, from its name: "Spell scroll (3rd level)", "Scroll, 3rd-level spell",
+ * "Level 3 scroll" and "Scroll (lvl 3)" are 3, and a cantrip or 0-level scroll is 0. -1 is a scroll whose name gives
+ * no level; null is an item that isn't a scroll.
+ */
+function scroll_level(string $item): ?int
+{
+    if (!preg_match('/\bscroll\b(?! case)/i', $item)) {
+        return null;
+    }
+    if (preg_match('/\bcantrip\b|\b0(?:th)?[- ]?level\b|\b(?:level|lvl)\.?[- ]?0\b/i', $item)) {
+        return 0;
+    }
+    if (preg_match('/\b([1-9])(?:st|nd|rd|th)?[- ]?level\b|\b(?:level|lvl)\.?[- ]?([1-9])\b/i', $item, $m)) {
+        return (int)($m[1] !== '' ? $m[1] : $m[2]);
+    }
+    return -1;
+}
+
+/** How many spells the stock form's Notes lists at once; the list says how many more there are. */
+const SPELL_SUGGEST_MAX = 12;
+
+/** "1st", "2nd", "3rd", "4th"… for a spell level. */
+function spell_level_name(int $level): string
+{
+    return $level . match ($level) { 1 => 'st', 2 => 'nd', 3 => 'rd', default => 'th' };
+}
+
+/**
+ * The systems whose scroll of a level can also hold a lower-level spell, cast at the scroll's level (5e's spell
+ * scrolls). In the others a scroll's level is its spell's.
+ */
+const SCROLL_HOLDS_LOWER_SPELLS = ['5e'];
+
+/**
+ * The SRD spells a scroll of $level (as scroll_level() gives it) can hold whose names contain $search, as [name, note]
+ * pairs: those of its level first, then (where SCROLL_HOLDS_LOWER_SPELLS) lower ones from the highest down, A–Z within
+ * each. Cantrips and 0-level spells go only on 0-level scrolls, and a scroll whose name gives no level gets any spell,
+ * lowest level first. Systems without a spell list get none.
+ *
+ * A system's spells are in app/data/srd-<system>-spells.php, by level. Each level lists its spells as names, or, where
+ * a spell's level depends on who casts it (3.5e), as name => the class and domain lists that have it at that level.
+ * The note says which, or gives the level when the lists don't.
+ */
+function spell_suggestions(string $ruleset, int $level, string $search): array
+{
+    $file = APP_DIR . "/data/srd-{$ruleset}-spells.php";
+    if (!in_array($ruleset, SRD_RULESETS, true) || !is_file($file) || $search === '') {
+        return [];
+    }
+    $lower = in_array($ruleset, SCROLL_HOLDS_LOWER_SPELLS, true);
+    $needle = srd_name_key($search);
+    $found = []; // name => [spell level => lists]
+    foreach (require $file as $spellLevel => $spells) {
+        $fits = match (true) {
+            $level < 0                => true,
+            $level === 0 || !$lower   => $spellLevel === $level,
+            default                   => $spellLevel >= 1 && $spellLevel <= $level,
+        };
+        if (!$fits) {
+            continue;
+        }
+        foreach ($spells as $key => $value) {
+            [$name, $lists] = is_int($key) ? [$value, []] : [$key, $value];
+            if (str_contains(srd_name_key($name), $needle)) {
+                $found[$name][$spellLevel] = $lists;
+            }
+        }
+    }
+    $rows = [];
+    foreach ($found as $name => $levels) {
+        ksort($levels);
+        $rows[] = ['name' => $name, 'level' => array_key_first($levels), 'levels' => $levels];
+    }
+    $key = fn($r) => $level < 0 ? [$r['level'], $r['name']] : [$r['level'] !== $level, -$r['level'], $r['name']];
+    usort($rows, fn($a, $b) => $key($a) <=> $key($b));
+    return array_map(function ($r) use ($level) {
+        $lists = [];
+        foreach ($r['levels'] as $spellLevel => $atLevel) {
+            // A scroll of a known level needs only who has the spell at it; with none known, say at which level.
+            foreach ($atLevel as $list) {
+                $lists[] = $level < 0 ? "{$list} {$spellLevel}" : $list;
+            }
+        }
+        if ($lists) {
+            return [$r['name'], implode(', ', $lists)];
+        }
+        $note = $r['level'] === 0 ? 'Cantrip' : spell_level_name($r['level']) . ' level';
+        if ($level > 0 && $r['level'] < $level) {
+            $note .= ', cast at ' . spell_level_name($level);
+        }
+        return [$r['name'], $note];
+    }, $rows);
+}
+
+/**
+ * The notes posted for a shelf line, with curly quotes made straight. Notes match exactly, so without this a spell
+ * picked from the suggestions ("Hunter’s Mark") or typed on a phone would be a different line from the same spell
+ * typed on a keyboard ("Hunter's Mark").
+ */
+function posted_stock_notes(): string
+{
+    return str_replace(['‘', '’', '“', '”'], ["'", "'", '"', '"'], post_str('notes', STOCK_NOTES_MAX));
+}
+
+/** Take a shelf line out of the store's open carts, so players can't buy it. Returns how many lines went. */
+function remove_from_open_carts(int $storeId, int $itemId, string $notes): int
+{
+    return q(
+        "DELETE FROM cart_items WHERE item_id = ? AND notes = ? AND cart_id IN (SELECT id FROM carts WHERE store_id = ? AND status = 'open')",
+        [$itemId, $notes, $storeId]
+    )->rowCount();
 }
 
 /** Character ids allowed in a store; empty array = everyone. */
@@ -528,15 +648,15 @@ function cart_detail(int $cartId): ?array
         return null;
     }
     $cart['lines'] = q_all(
-        'SELECT ci.id, ci.item_id, ci.quantity, ci.unit_price_cp, i.name, i.weight,
+        'SELECT ci.id, ci.item_id, ci.notes, ci.quantity, ci.unit_price_cp, i.name, i.weight,
                 cat.name AS category, cat.slug AS category_slug,
                 st.quantity AS stock_left
            FROM cart_items ci
            JOIN items i ON i.id = ci.item_id
            JOIN categories cat ON cat.id = i.category_id
-           LEFT JOIN store_stock st ON st.store_id = ? AND st.item_id = ci.item_id
+           LEFT JOIN store_stock st ON st.store_id = ? AND st.item_id = ci.item_id AND st.notes = ci.notes
           WHERE ci.cart_id = ?
-          ORDER BY cat.sort_order, i.name',
+          ORDER BY cat.sort_order, i.name, ci.notes',
         [$cart['store_id'], $cartId]
     );
     $cart['total_cp'] = 0;

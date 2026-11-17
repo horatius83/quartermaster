@@ -74,5 +74,46 @@ foreach (SRD_RULESETS as $ruleset) {
             }
         }
     }
+    // Every spell scroll the system's items have must give its level, or its notes would be offered every spell.
+    foreach (srd_items($ruleset, 'magic') as [$name]) {
+        if (scroll_level($name) === -1) {
+            $problems[] = "{$ruleset} magic {$name}: a scroll whose name gives no spell level";
+        }
+    }
+
+    // The spells suggested for a scroll's notes (see spell_suggestions()).
+    $file = APP_DIR . "/data/srd-{$ruleset}-spells.php";
+    if (!is_file($file)) {
+        $problems[] = "{$ruleset}: no spell list";
+        continue;
+    }
+    $count = 0;
+    foreach (require $file as $level => $spells) {
+        if (!is_int($level) || $level < 0 || $level > 9) {
+            $problems[] = "{$ruleset} spells: a level {$level}";
+            continue;
+        }
+        $names = [];
+        foreach ($spells as $key => $value) {
+            [$name, $lists] = is_int($key) ? [$value, null] : [$key, $value];
+            $where = "{$ruleset} spells {$level} {$name}";
+            $names[] = srd_name_key($name);
+            $count++;
+            // Picked, a name fills a shelf line's notes, which keep only so much.
+            if (!is_string($name) || $name === '' || mb_strlen($name) > STOCK_NOTES_MAX) {
+                $problems[] = "{$where}: bad name";
+            }
+            if ($lists !== null && ($lists === [] || array_filter($lists, fn($l) => !is_string($l) || $l === '') !== [])) {
+                $problems[] = "{$where}: bad class lists";
+            }
+        }
+        foreach (array_unique(array_diff_assoc($names, array_unique($names))) as $twice) {
+            $problems[] = "{$ruleset} spells {$level} {$twice}: listed twice";
+        }
+    }
+    // SRD 5.1 has 319 spells; the 3.5e lists have more than 600 spells, some under several levels.
+    if ($count < 300) {
+        $problems[] = "{$ruleset} spells: only {$count}";
+    }
 }
 echo json_encode(['problems' => $problems]);

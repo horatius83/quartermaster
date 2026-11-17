@@ -97,9 +97,9 @@ test('DM stocks a shelf by picking a suggestion', async ({ page }) => {
   const form = page.locator('#stock-form');
   const input = form.getByRole('combobox', { name: 'Stock an item' });
   await input.pressSequentially('torc');
-  await form.getByRole('listbox').getByRole('option', { name: /Torch/ }).click();
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Torch/ }).click();
   await expect(input).toHaveValue('Torch');
-  await expect(form.getByRole('listbox')).toBeHidden();
+  await expect(form.getByRole('listbox', { name: 'Catalog items' })).toBeHidden();
   await form.getByRole('button', { name: 'Add to shelf' }).click();
   await expect(page.locator('#stock-body tr', { hasText: 'Torch' })).toHaveCount(1);
 });
@@ -385,4 +385,69 @@ test('Back to a page htmx no longer has cached loads it in full when the assets 
   await expect(page).toHaveURL(/\/dm\/carts$/);
   await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
   await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
+});
+
+test('the stock form suggests spells a scroll of its level can hold for its notes', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const notes = form.getByRole('combobox', { name: 'Notes' });
+  const spells = form.getByRole('listbox', { name: 'Spells' });
+  await form.getByLabel('Stock an item').fill('Spell scroll (3rd level)');
+  await notes.pressSequentially('fire');
+  // Its own level first, then lower ones cast at it; no cantrips (Fire Bolt) or higher spells (Fire Shield).
+  await expect(spells.getByRole('option')).toHaveText([/Fireball\s*3rd level/, /Faerie Fire\s*1st level, cast at 3rd/]);
+  await notes.press('ArrowDown');
+  await notes.press('Enter');
+  await expect(notes).toHaveValue('Fireball');
+  await expect(spells).toBeHidden();
+  await form.getByRole('button', { name: 'Add to shelf' }).click();
+  await expect(page.locator('#stock-body input[name="notes"][value="Fireball"]')).toHaveCount(1);
+
+  // Changing the item drops the list it had and searches again: a cantrip scroll offers only cantrips, and a
+  // "Level 1 scroll" only 1st-level spells.
+  const backToNotes = async () => {
+    await notes.focus();
+    await notes.press('ArrowDown');
+  };
+  await form.getByLabel('Stock an item').fill('Spell scroll (3rd level)');
+  await notes.pressSequentially('fire');
+  await expect(spells.getByRole('option')).toHaveCount(2);
+  await notes.press('Escape');
+  await form.getByLabel('Stock an item').fill('Spell scroll (cantrip)');
+  await backToNotes();
+  await expect(spells.getByRole('option')).toHaveText([/Fire Bolt\s*Cantrip/]);
+  await notes.press('Escape');
+  await form.getByLabel('Stock an item').fill('Level 1 scroll');
+  await backToNotes();
+  await expect(spells.getByRole('option')).toHaveText([/Faerie Fire\s*1st level/]);
+
+  // A long list says how many more there are.
+  await notes.fill('a');
+  await form.getByLabel('Stock an item').fill('Spell scroll (9th level)');
+  await backToNotes();
+  await expect(spells.getByRole('option')).toHaveCount(12);
+  await expect(spells).toContainText(/\d+ more fit\. Type more of the name to find it\./);
+  await notes.press('Escape');
+
+  // A picked spell is saved with a straight apostrophe, so the same spell typed on a phone (curly) is the same line.
+  await form.getByLabel('Stock an item').fill('Spell scroll (1st level)');
+  await notes.fill("hunter's");
+  await spells.getByRole('option', { name: /Hunter’s Mark/ }).click();
+  await expect(notes).toHaveValue("Hunter's Mark");
+  await form.getByRole('button', { name: 'Add to shelf' }).click();
+  await expect(page.locator('#stock-body input[name="notes"][value="Hunter\'s Mark"]')).toHaveCount(1);
+  await form.getByLabel('Stock an item').fill('Spell scroll (1st level)');
+  await notes.fill('Hunter’s Mark');
+  await notes.press('Escape');
+  await form.getByLabel('In stock').fill('3');
+  await form.getByRole('button', { name: 'Add to shelf' }).click();
+  await expect(page.getByLabel("Stock of Spell scroll (1st level) (Hunter's Mark)")).toHaveValue('3');
+  await expect(page.locator('#stock-body input[name="notes"][value^="Hunter"]')).toHaveCount(1);
+
+  // An item that isn't a scroll offers nothing.
+  await form.getByLabel('Stock an item').fill('Rope');
+  const reply = page.waitForResponse(/\/dm\/stock\/spells\?/);
+  await notes.pressSequentially('fire');
+  expect(await (await reply).text()).toBe('');
+  await expect(spells).toBeHidden();
 });

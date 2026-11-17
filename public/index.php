@@ -64,6 +64,7 @@ $routes = [
     ['POST', '/dm/stores/{id}/toggle',     'dm_store_toggle'],
     ['POST', '/dm/stores/{id}/delete',     'dm_store_delete'],
     ['POST', '/dm/stores/{id}/stock',      'dm_stock_add'],
+    ['GET',  '/dm/stock/spells',           'dm_stock_spells'],
     ['POST', '/dm/stock/{id}',             'dm_stock_update'],
     ['POST', '/dm/stock/{id}/delete',      'dm_stock_delete'],
 

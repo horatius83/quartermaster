@@ -49,6 +49,7 @@ const UPGRADES = [
     '006-rulesets'      => 'SELECT ruleset FROM campaigns LIMIT 1',
     '007-system-choice' => 'SELECT ruleset_open FROM campaigns LIMIT 1',
     '008-sales'         => 'SELECT 1 FROM sales LIMIT 1',
+    '009-stock-notes'   => 'SELECT notes FROM store_stock LIMIT 1',
 ];
 
 /**

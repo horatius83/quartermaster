@@ -250,6 +250,12 @@ function filter_tags(array $source): array
     return parse_tags(implode(',', array_filter((array)($source['tag'] ?? []), 'is_string')));
 }
 
+/** An item's name with its notes, for messages: "Spell scroll (Magic Missile)". */
+function named_with_notes(string $name, string $notes): string
+{
+    return $notes === '' ? $name : "{$name} ({$notes})";
+}
+
 function fmt_weight(float|string $w): string
 {
     $w = round((float)$w, 2);

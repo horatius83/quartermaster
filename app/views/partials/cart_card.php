@@ -17,12 +17,13 @@ $when = $pending ? 'sent ' . time_ago($cart['submitted_at']) : strtolower($label
     <?php foreach ($cart['lines'] as $l): ?>
       <li class="cart-line">
         <span class="name"><?= e($l['name']) ?><?= str_replace('class="tag ', 'class="tag tag-sm ', category_tag($l['category'], $l['category_slug'])) ?>
+          <?php if ($l['notes'] !== ''): ?><br><span class="muted small"><?= e($l['notes']) ?></span><?php endif; ?>
           <?php if ($pending && $l['stock_left'] !== null && (int)$l['stock_left'] < (int)$l['quantity']): ?>
             <br><span class="small" style="color:var(--clay-dark)">Only <?= (int)$l['stock_left'] ?> in stock</span>
           <?php endif; ?>
         </span>
         <?php if ($pending): ?>
-          <label class="visually-hidden" for="cq-<?= (int)$l['id'] ?>">Quantity of <?= e($l['name']) ?></label>
+          <label class="visually-hidden" for="cq-<?= (int)$l['id'] ?>">Quantity of <?= e(named_with_notes($l['name'], $l['notes'])) ?></label>
           <input class="input-sm" style="width:64px" id="cq-<?= (int)$l['id'] ?>" type="number" min="0" name="quantity" value="<?= (int)$l['quantity'] ?>"
             hx-post="<?= e(url('/dm/cart-items/' . $l['id'])) ?>" hx-trigger="change" hx-target="closest article" hx-swap="outerHTML">
         <?php else: ?>

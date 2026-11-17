@@ -76,7 +76,8 @@
   });
 
   // Item-name suggestions (views/partials/item_suggest.php). Typing searches the catalog through htmx; the ▾ button
-  // lists the category chosen in the form's Category field. This opens, closes and picks.
+  // lists the category chosen in the form's Category field. This opens, closes and picks. The stock form's Notes field
+  // (views/dm/stores.php) suggests spells the same way, with no ▾ button.
   // The list's state lives on it: data-mode is "search" or "browse"; data-settled is text the user is done with (an
   // item picked, or the list dismissed), which no search reply may reopen the list over; and data-gen counts the user's
   // moves, so any reply that arrives after one of them is dropped. Browse requests go through htmx too (so a sign-in
@@ -134,6 +135,21 @@
     p.list.dataset.settled = p.input.value;
     closeSuggestions(p);
   }
+  // A suggestion field whose search takes in another field (hx-include="#that-field": the stock form's Notes takes in
+  // the item, whose spell level picks the spells). When that field changes, the list held is for its old value, so
+  // drop it (and any reply still on its way) and, if there's text to search for, search again.
+  function refreshDependents(field) {
+    if (!field.id) return;
+    Array.prototype.forEach.call(document.querySelectorAll('[role="combobox"][hx-include="#' + field.id + '"]'), function (input) {
+      var p = suggestParts(input);
+      if (!p) return;
+      p.list.innerHTML = '';
+      p.list.dataset.mode = '';
+      delete p.list.dataset.settled;
+      closeSuggestions(p);
+      if (input.value !== '') htmx.trigger(input, 'qm-refresh');
+    });
+  }
   function pickSuggestion(p, opt) {
     if (opt.dataset.more) {
       // "Show more" at the end of a long category: load the next batch under this one.
@@ -141,6 +157,7 @@
       return;
     }
     p.input.value = opt.dataset.value;
+    refreshDependents(p.input);
     // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
     var category = suggestCategory(p);
     var id = opt.dataset.categoryId;
@@ -211,6 +228,7 @@
   });
 
   document.addEventListener('input', function (evt) {
+    refreshDependents(evt.target);
     var p = suggestParts(evt.target);
     if (!p || evt.target !== p.input) return;
     // Typing always searches the whole catalog, even with a category being browsed.

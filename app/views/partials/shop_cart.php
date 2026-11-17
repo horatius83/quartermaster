@@ -16,17 +16,17 @@ $total = $cart['total_cp'] ?? 0;
     <p class="muted" style="margin:8px 0">Nothing here yet. Browse the shelves and add what you need.</p>
   <?php else: ?>
     <ul class="list-plain">
-      <?php foreach ($lines as $l): $u = url('/shop/line/' . $l['id']); ?>
+      <?php foreach ($lines as $l): $u = url('/shop/line/' . $l['id']); $label = named_with_notes($l['name'], $l['notes']); ?>
         <li class="cart-line">
-          <span class="name"><?= e($l['name']) ?></span>
+          <span class="name"><?= e($l['name']) ?><?php if ($l['notes'] !== ''): ?><br><span class="muted small"><?= e($l['notes']) ?></span><?php endif; ?></span>
           <?php if ($waiting): ?>
             <span class="muted"><?= (int)$l['quantity'] ?> ×</span>
           <?php else: ?>
             <span class="stepper">
-              <button class="round-btn" style="width:32px;height:32px" type="button" aria-label="One fewer <?= e($l['name']) ?>"
+              <button class="round-btn" style="width:32px;height:32px" type="button" aria-label="One fewer <?= e($label) ?>"
                 hx-post="<?= e($u) ?>" hx-vals='{"delta": -1}' hx-target="#cart" hx-swap="outerHTML">−</button>
               <output style="min-width:24px;font-size:18px"><?= (int)$l['quantity'] ?></output>
-              <button class="round-btn" style="width:32px;height:32px" type="button" aria-label="One more <?= e($l['name']) ?>"
+              <button class="round-btn" style="width:32px;height:32px" type="button" aria-label="One more <?= e($label) ?>"
                 hx-post="<?= e($u) ?>" hx-vals='{"delta": 1}' hx-target="#cart" hx-swap="outerHTML">+</button>
             </span>
           <?php endif; ?>
