@@ -29,6 +29,12 @@ test('sharing pools the party’s coin, and carts are paid from it', async ({ pa
   await expect(page.locator('#party-purse-card')).toContainText('1,284');
   await page.goto(`/dm/inventory/${BRYN}`);
   await expect(page.locator('#sheet')).toContainText('Their coin is in the party purse.');
+  // The link inside the sheet opens the stash as a page of its own, not inside the sheet.
+  await page.locator('#sheet').getByRole('link', { name: 'party purse' }).click();
+  await expect(page).toHaveURL(/\/dm\/party-stash$/);
+  await expect(page.getByRole('heading', { name: 'Party Stash' })).toBeVisible();
+  await expect(page.locator('nav.sidebar')).toHaveCount(1);
+  await expect(page.locator('#sheet')).toHaveCount(0);
 
   await signIn(page, 'bryn');
   await expect(purse(page)).toHaveAttribute('aria-label', 'Party purse: 1,284 gp');

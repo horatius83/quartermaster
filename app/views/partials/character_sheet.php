@@ -1,6 +1,12 @@
-<?php /** @var array $char @var bool $shared whether the campaign shares a purse, which holds the coin instead */ ?>
+<?php
+/**
+ * @var array $char @var bool $shared whether the campaign shares a purse, which holds the coin instead
+ * hx-disinherit keeps the form's target and swap to itself: the party purse link inside it is a boosted link, which
+ * would otherwise swap the whole page it fetches into the sheet's place.
+ */
+?>
 <form id="sheet" class="card form-row" style="padding:12px 16px"
-      hx-post="<?= e(url('/dm/inventory/' . $char['id'] . '/sheet')) ?>" hx-target="this" hx-swap="outerHTML">
+      hx-post="<?= e(url('/dm/inventory/' . $char['id'] . '/sheet')) ?>" hx-target="this" hx-swap="outerHTML" hx-disinherit="*">
   <?php if ($shared): ?>
     <p class="muted small" style="margin:0;align-self:center;max-width:150px">Their coin is in the <a href="<?= e(url('/dm/party-stash')) ?>">party purse</a>.</p>
   <?php else: ?>
