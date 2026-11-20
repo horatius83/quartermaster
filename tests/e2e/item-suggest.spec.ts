@@ -104,6 +104,116 @@ test('DM stocks a shelf by picking a suggestion', async ({ page }) => {
   await expect(page.locator('#stock-body tr', { hasText: 'Torch' })).toHaveCount(1);
 });
 
+test('picking an item to stock fills in its price and weight and shows its description', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  const price = form.getByLabel('Price');
+  const weight = form.getByLabel('Weight');
+  const category = form.locator('select[name="category_id"]');
+  const description = form.getByLabel('Description');
+  await expect(description).toHaveAttribute('readonly', '');
+  await expect(description).toHaveValue('');
+
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(description).toHaveValue('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(price).toHaveValue('15 gp');
+  await expect(weight).toHaveValue('3');
+  await expect(category.locator('option:checked')).toHaveText('Weapon');
+
+  // Another catalog item replaces them, category and all.
+  await input.fill('');
+  await input.pressSequentially('potion of');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Potion of Healing/ }).click();
+  await expect(description).toHaveValue(/restores 2d4 \+ 2 hit points/);
+  await expect(price).toHaveValue('50 gp');
+  await expect(weight).toHaveValue('0.5');
+  await expect(category.locator('option:checked')).toHaveText('Consumable');
+
+  // A name that's new to the catalog has no description, and what was filled in goes back, but what the DM
+  // changed stays.
+  await weight.fill('2');
+  await input.fill('Potion of Gumption');
+  await expect(price).toHaveValue('');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(description).toHaveValue('');
+  await expect(weight).toHaveValue('2');
+
+  // Typing a catalog item's name in full fills in what the DM hasn't changed: Price, but not their Weight.
+  await input.fill('torch');
+  await expect(description).toHaveValue(/Burns for 1 hour/);
+  await expect(price).toHaveValue('1 cp');
+  await expect(weight).toHaveValue('2');
+
+  // A price changed after the fill is the DM's, so typing the name again keeps it.
+  await price.fill('3 cp');
+  const redrawn = page.waitForResponse(/\/dm\/catalog\/details\?item=Torch/);
+  await input.fill('Torc');
+  await input.fill('Torch');
+  await redrawn;
+  await expect(description).toHaveValue(/Burns for 1 hour/);
+  await expect(price).toHaveValue('3 cp');
+  await form.getByRole('button', { name: 'Add to shelf' }).click();
+  await expect(page.getByLabel('Price of Torch')).toHaveValue('3 cp');
+  // The form empties for the next item, description too.
+  await expect(input).toHaveValue('');
+  await expect(price).toHaveValue('');
+  await expect(description).toHaveValue('');
+  await expect(description).toHaveAttribute('placeholder', 'Pick an item to read its description.');
+
+  // A pick fills Price over one the DM typed first, since that's what picking is for.
+  await price.fill('9 gp');
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(price).toHaveValue('15 gp');
+});
+
+test('stocking straight after retyping the item doesn’t use the old item’s price', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(form.getByLabel('Price')).toHaveValue('15 gp');
+  // The description box never catches up before Enter.
+  await page.route(/\/dm\/catalog\/details/, () => {});
+  await input.fill('Torch');
+  await expect(form.getByLabel('Price')).toHaveValue('');
+  await input.press('Enter');
+  await expect(page.getByLabel('Price of Torch')).toHaveValue('1 cp');
+});
+
+test('a slow catalog reply doesn’t overwrite a price typed while it was on its way', async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/dm\/catalog\/details\?item=Torch/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  await form.getByRole('combobox', { name: 'Stock an item' }).pressSequentially('torc');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Torch/ }).click();
+  await form.getByLabel('Price').fill('3 cp');
+  const reply = page.waitForResponse(/\/dm\/catalog\/details\?item=Torch/);
+  release();
+  await reply;
+  await expect(form.getByLabel('Description')).toHaveValue(/Burns for 1 hour/);
+  await expect(form.getByLabel('Price')).toHaveValue('3 cp');
+  // Weight wasn't touched meanwhile, so it's filled in.
+  await expect(form.getByLabel('Weight')).toHaveValue('1');
+});
+
+test('an item with no description says so', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  await form.getByRole('combobox', { name: 'Stock an item' }).pressSequentially('quive');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Quiver/ }).click();
+  await expect(form.getByLabel('Description')).toHaveAttribute('placeholder', 'The catalog has no description of Quiver.');
+  await expect(form.getByLabel('Price')).toHaveValue('1 gp');
+});
+
 test('the ▾ button lists the chosen category A–Z, and Category switches it', async ({ openPage, browserName }) => {
   test.skip(browserName === 'firefox', 'Firefox has no mobile emulation');
   const page = await openPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

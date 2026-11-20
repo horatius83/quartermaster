@@ -150,3 +150,16 @@ test('new notes on a shelf line wait for carts sent to the DM, and take it out o
   await expect(page.locator('#cart .cart-line')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add Spell scroll (1st level) (Haste) to cart' })).toBeVisible();
 });
+
+test('players can read a ware’s description from the catalog', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'Mossbottom Apothecary' }).click();
+  const potion = page.locator('.ware', { hasText: 'Potion of Healing' });
+  const about = potion.getByText('About the Potion of Healing');
+  const text = potion.getByText(/restores 2d4 \+ 2 hit points/);
+  await expect(text).toBeHidden();
+  await about.click();
+  await expect(text).toBeVisible();
+  // Wares with no description have nothing to open.
+  await expect(page.locator('.ware', { hasText: 'Antitoxin' }).locator('details')).toHaveCount(0);
+});
