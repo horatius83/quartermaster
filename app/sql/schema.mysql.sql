@@ -27,12 +27,15 @@ CREATE TABLE login_attempts (
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
 -- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.
 -- ruleset is the system it plays (see CAMPAIGN_RULESETS in lib/repo.php). It decides the catalog items it uses and never changes, except that a campaign from before systems has ruleset_open = 1 and can set it once.
+-- With shared_purse = 1 the party pools its coin in purse_cp (its characters' own coin_cp stays 0) and shares party_items.
 CREATE TABLE campaigns (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   owner_user_id INT UNSIGNED NULL,
   name          VARCHAR(100) NOT NULL,
   ruleset       VARCHAR(10) NOT NULL DEFAULT '5e',
   ruleset_open  TINYINT(1) NOT NULL DEFAULT 0,
+  shared_purse  TINYINT(1) NOT NULL DEFAULT 0,
+  purse_cp      INT NOT NULL DEFAULT 0,
   created_at    DATETIME NOT NULL,
   KEY ix_campaigns_owner (owner_user_id),
   CONSTRAINT fk_campaigns_owner FOREIGN KEY (owner_user_id) REFERENCES users(id)
@@ -92,6 +95,18 @@ CREATE TABLE inventory (
   KEY ix_inventory_character (character_id),
   CONSTRAINT fk_inventory_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
   CONSTRAINT fk_inventory_item FOREIGN KEY (item_id) REFERENCES items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The party stash: items any character in a shared-purse campaign can put in or take out, stacked like a pack.
+CREATE TABLE party_items (
+  id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  campaign_id INT UNSIGNED NOT NULL,
+  item_id     INT UNSIGNED NOT NULL,
+  quantity    INT NOT NULL DEFAULT 1,
+  notes       VARCHAR(255) NOT NULL DEFAULT '',
+  KEY ix_party_items_campaign (campaign_id),
+  CONSTRAINT fk_party_items_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+  CONSTRAINT fk_party_items_item FOREIGN KEY (item_id) REFERENCES items(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE stores (
@@ -184,11 +199,13 @@ CREATE TABLE sales (
 
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
+-- party = 1 is a change to the party purse or stash, with no character.
 CREATE TABLE inventory_log (
   id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   campaign_id   INT UNSIGNED NULL,
   character_id  INT UNSIGNED NULL,
   character_name VARCHAR(100) NOT NULL DEFAULT '',
+  party         TINYINT(1) NOT NULL DEFAULT 0,
   actor_user_id INT UNSIGNED NULL,
   actor_name    VARCHAR(50)  NOT NULL DEFAULT '',
   action        VARCHAR(20)  NOT NULL,

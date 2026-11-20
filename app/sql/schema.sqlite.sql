@@ -24,12 +24,15 @@ CREATE INDEX ix_login_attempts_ip ON login_attempts (ip, created_at);
 -- Each campaign has its own party, stores and history. The item catalog is shared by all of them.
 -- owner_user_id is the DM running it, and only that DM sees it. A DM who still has campaigns can't be deleted.
 -- ruleset is the system it plays (see CAMPAIGN_RULESETS in lib/repo.php). It decides the catalog items it uses and never changes, except that a campaign from before systems has ruleset_open = 1 and can set it once.
+-- With shared_purse = 1 the party pools its coin in purse_cp (its characters' own coin_cp stays 0) and shares party_items.
 CREATE TABLE campaigns (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_user_id INTEGER NULL REFERENCES users(id),
   name          TEXT NOT NULL,
   ruleset       TEXT NOT NULL DEFAULT '5e',
   ruleset_open  INTEGER NOT NULL DEFAULT 0,
+  shared_purse  INTEGER NOT NULL DEFAULT 0,
+  purse_cp      INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL
 );
 
@@ -77,6 +80,16 @@ CREATE TABLE inventory (
   quantity     INTEGER NOT NULL DEFAULT 1,
   notes        TEXT NOT NULL DEFAULT ''
 );
+
+-- The party stash: items any character in a shared-purse campaign can put in or take out, stacked like a pack.
+CREATE TABLE party_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  item_id     INTEGER NOT NULL REFERENCES items(id),
+  quantity    INTEGER NOT NULL DEFAULT 1,
+  notes       TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX ix_party_items_campaign ON party_items (campaign_id);
 
 CREATE TABLE stores (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,11 +165,13 @@ CREATE INDEX ix_sales_character ON sales (character_id, status);
 
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
+-- party = 1 is a change to the party purse or stash, with no character.
 CREATE TABLE inventory_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   campaign_id   INTEGER NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   character_id  INTEGER NULL REFERENCES characters(id) ON DELETE SET NULL,
   character_name TEXT NOT NULL DEFAULT '',
+  party         INTEGER NOT NULL DEFAULT 0,
   actor_user_id INTEGER NULL,
   actor_name    TEXT NOT NULL DEFAULT '',
   action        TEXT NOT NULL,

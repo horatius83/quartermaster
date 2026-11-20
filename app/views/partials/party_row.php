@@ -1,10 +1,11 @@
+<?php /** @var array $c @var bool $shared whether the campaign shares a purse, which holds the coin instead */ ?>
 <tr id="party-<?= (int)$c['id'] ?>">
   <td>
     <div class="item-name"><?= e($c['name']) ?></div>
     <div class="muted small"><?= e($c['class_label'] ?: '—') ?></div>
   </td>
   <td><?= $c['username'] ? e($c['username']) : '<span class="muted">none</span>' ?></td>
-  <td class="nowrap"><?= e(coins((int)$c['coin_cp'])) ?></td>
+  <td class="nowrap"><?= $shared ? '<span class="muted">party purse</span>' : e(coins((int)$c['coin_cp'])) ?></td>
   <td>
     <form class="move-form" hx-post="<?= e(url('/dm/party/' . $c['id'] . '/password')) ?>" hx-target="#party-<?= (int)$c['id'] ?>" hx-swap="outerHTML">
       <?php if (!$c['username']): ?>

@@ -7,10 +7,10 @@
       </div>
       <a class="btn" href="<?= e(url('/pack')) ?>">Back to my pack</a>
     </header>
-    <p class="muted" style="margin:0;max-width:680px">Everything that went into or out of your pack and purse, newest first.</p>
+    <p class="muted" style="margin:0;max-width:680px">Everything that went into or out of your pack and purse<?= $party ? ', and the party purse and stash' : '' ?>, newest first.</p>
 
     <?= render('partials/history_table', [
-        'rows' => $rows, 'hasMore' => $hasMore, 'showCharacter' => false, 'path' => $path,
+        'rows' => $rows, 'hasMore' => $hasMore, 'showCharacter' => false, 'markParty' => $markParty, 'path' => $path,
         'emptyText' => 'Nothing has changed in your pack yet.',
     ]) ?>
   </main>

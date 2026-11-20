@@ -97,7 +97,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <div class="topbar-right">
       <?php if ($me): ?>
         <span class="muted-light"><?= e($me['name']) ?></span>
-        <?= render('partials/purse_pill', ['coin' => (int)$me['coin_cp']]) ?>
+        <?= render('partials/purse_pill', ['coin' => spendable_cp($me), 'party' => shares_purse()]) ?>
       <?php endif; ?>
       <form method="post" action="<?= e(url('/logout')) ?>">
         <?= csrf_field() ?>

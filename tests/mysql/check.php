@@ -1,19 +1,26 @@
 <?php
 // Checks item tags, rulesets and sales against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
-// upgrades 005, 006, 008 and 009 run, that 006 and 009 finish if interrupted, that the tag column stores, sorts and cascades the way
-// the app relies on, and that a sale settles under MySQL's row locks. Run by tests/mysql/run.mjs.
+// upgrades 005, 006, 008, 009 and 010 run, that 006, 009 and 010 finish if interrupted, that the tag column stores, sorts and
+// cascades the way the app relies on, and that a sale settles and the party stash moves under MySQL's row locks. Run by
+// tests/mysql/run.mjs.
 declare(strict_types=1);
 
 putenv('QM_CONFIG=' . __DIR__ . '/config.php');
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $cfg = (require __DIR__ . '/config.php')['mysql'];
 
-// Build the current schema, then undo upgrades 009, 008, 006 and 005: a database from just before them.
+// Build the current schema, then undo upgrades 010, 009, 008, 006 and 005: a database from just before them.
 $raw = new PDO("mysql:host={$cfg['host']};dbname={$cfg['database']};charset=utf8mb4", $cfg['username'], $cfg['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $schema = preg_replace('/^\s*--.*$/m', '', file_get_contents(__DIR__ . '/../../app/sql/schema.mysql.sql'));
 foreach (array_filter(array_map('trim', explode(';', $schema))) as $statement) {
     $raw->exec($statement);
 }
+$undoPartyPurse = function () use ($raw): void {
+    $raw->exec('DROP TABLE party_items');
+    $raw->exec('ALTER TABLE inventory_log DROP COLUMN party');
+    $raw->exec('ALTER TABLE campaigns DROP COLUMN purse_cp, DROP COLUMN shared_purse');
+};
+$undoPartyPurse();
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
 $raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
@@ -40,9 +47,19 @@ $check('upgrade 006 gave campaigns a ruleset', 'ruleset', q_one('SHOW COLUMNS FR
 $uniqueOn = fn(string $table) => array_values(array_unique(array_column(q_all("SHOW INDEX FROM {$table} WHERE Non_unique = 0 AND Key_name <> 'PRIMARY'"), 'Key_name')));
 $check('upgrade 009 made shelf lines unique with their notes', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
 $check('upgrade 009 made cart lines unique with their notes', ['uq_cart_item_notes'], $uniqueOn('cart_items'));
+$columnsOf = fn(string $table, array $names) => array_values(array_intersect($names, array_column(q_all("SHOW COLUMNS FROM {$table}"), 'Field')));
+$check('upgrade 010 gave campaigns a party purse', ['shared_purse', 'purse_cp'], $columnsOf('campaigns', ['shared_purse', 'purse_cp']));
+$check('upgrade 010 created the party stash', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
 
-// Upgrade 009 stopped after its first table: the next run skips that one and does the other.
+// Upgrade 010 stopped before its table: the next run skips the columns that are there and makes it.
+$raw->exec('DROP TABLE party_items');
+apply_upgrades(db());
+$check('an interrupted upgrade 010 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
+
+// Upgrade 009 stopped after its first table: the next run skips that one and does the other. Upgrade 010 never ran
+// after it, so it's undone too (the app only looks further when the newest one is missing).
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
+$undoPartyPurse();
 apply_upgrades(db());
 $check('an interrupted upgrade 009 is finished by the next run', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
 $check('finishing upgrade 009 leaves the cart lines as they were', ['uq_cart_item_notes'], $uniqueOn('cart_items'));
@@ -57,6 +74,7 @@ $check('the notes keys fit a COMPACT table', ['uq_stock_store_item_notes'], $uni
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
 $raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
+$undoPartyPurse();
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');
 apply_upgrades(db());
 $check('an interrupted upgrade 006 is finished by the next run', 'ruleset', q_one('SHOW COLUMNS FROM campaigns WHERE Field = ?', ['ruleset'])['Field'] ?? null);
@@ -190,6 +208,24 @@ try {
 } catch (RuntimeException) {
     $check('a sale can only be settled once', true, true);
 }
+
+// The same sale in a campaign that shares a purse pays the party, and its stash moves stacks under the same locks.
+q('UPDATE campaigns SET shared_purse = 1, purse_cp = 500 WHERE id = ?', [$other]);
+q('INSERT INTO inventory (character_id, item_id, quantity) VALUES (?, ?, 2)', [$seller, $held['id']]);
+$shared = insert("INSERT INTO sales (character_id, item_id, quantity, asking_cp, status, created_at) VALUES (?, ?, 1, 250, 'pending', ?)", [$seller, $held['id'], now()]);
+settle_sale($shared, byPlayer: false);
+$check('a shared purse is paid instead of the seller', [750, 1000], [
+    (int)q_val('SELECT purse_cp FROM campaigns WHERE id = ?', [$other]),
+    (int)q_val('SELECT coin_cp FROM characters WHERE id = ?', [$seller]),
+]);
+$stack = q_one('SELECT inv.*, inv.item_id, i.name FROM inventory inv JOIN items i ON i.id = inv.item_id WHERE inv.character_id = ? ORDER BY inv.id LIMIT 1', [$seller]);
+$check('a stack goes into the party stash', 2, pack_to_stash($stack, null));
+$stashed = q_one('SELECT pi.*, i.name FROM party_items pi JOIN items i ON i.id = pi.item_id WHERE pi.campaign_id = ?', [$other]);
+$check('and comes back out', 1, stash_to_pack($stashed, ['id' => $seller, 'name' => 'Seller'], 1));
+$check('leaving the rest in the stash, logged on both sides', [1, 2], [
+    (int)q_val('SELECT quantity FROM party_items WHERE id = ?', [$stashed['id']]),
+    (int)q_val("SELECT COUNT(*) FROM inventory_log WHERE campaign_id = ? AND party = 1 AND action IN ('move_in', 'move_out')", [$other]),
+]);
 
 // Shelf notes match exactly, as in SQLite, and the longest the form allows fits.
 $scroll = (int)create_item('Check scroll', (int)categories()[0]['id'], 0, 100, ruleset: '5e')['id'];

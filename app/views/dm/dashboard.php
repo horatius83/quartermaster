@@ -24,6 +24,25 @@
         <div class="card empty">No adventurers yet. <a href="<?= e(url('/dm/party')) ?>">Add your players</a>.</div>
       <?php endif; ?>
       <div class="grid-cards">
+        <?php if ($shared || (int)$purse['stacks']): $p = coin_parts((int)$purse['coin_cp']); ?>
+          <article class="card card-stack card-dashed" id="party-purse-card">
+            <div class="row-between" style="align-items:baseline">
+              <h3 class="card-title">Party purse</h3>
+              <span class="muted small"><?= $shared ? 'Shared by everyone' : 'No longer shared' ?></span>
+            </div>
+            <?php if ($shared): ?>
+              <div class="coins">
+                <span><strong class="gp"><?= number_format($p['gp']) ?></strong> gp</span>
+                <span><strong class="sp"><?= $p['sp'] ?></strong> sp</span>
+                <span><strong class="cp"><?= $p['cp'] ?></strong> cp</span>
+              </div>
+            <?php endif; ?>
+            <div class="row-between ledger-rule">
+              <span class="muted small"><?= (int)$purse['stacks'] ?> <?= (int)$purse['stacks'] === 1 ? 'stack' : 'stacks' ?> in the stash</span>
+              <a href="<?= e(url('/dm/party-stash')) ?>">Open stash →</a>
+            </div>
+          </article>
+        <?php endif; ?>
         <?php foreach ($characters as $c):
           $cap = max(1.0, (float)$c['carry_capacity']);
           $pct = min(100, round((float)$c['load_weight'] / $cap * 100));
@@ -34,11 +53,13 @@
               <span class="muted small"><?= e($c['class_label']) ?></span>
             </div>
             <div class="muted small"><?= $c['username'] ? 'Login: ' . e($c['username']) : 'No login yet' ?></div>
+            <?php if (!$shared): ?>
             <div class="coins">
               <span><strong class="gp"><?= number_format($p['gp']) ?></strong> gp</span>
               <span><strong class="sp"><?= $p['sp'] ?></strong> sp</span>
               <span><strong class="cp"><?= $p['cp'] ?></strong> cp</span>
             </div>
+            <?php endif; ?>
             <div>
               <div class="row-between small muted"><span>Carrying</span><span><?= e(fmt_weight($c['load_weight'])) ?> / <?= e(fmt_weight($c['carry_capacity'])) ?></span></div>
               <div class="meter<?= (float)$c['load_weight'] > $cap ? ' over' : '' ?>" role="img" aria-label="<?= $pct ?>% of carrying capacity"><span style="width: <?= $pct ?>%"></span></div>
