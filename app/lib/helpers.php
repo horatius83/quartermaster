@@ -111,11 +111,12 @@ const OLD_INPUT_TTL = 300;
 /**
  * Send a failed form submit back to $path with an error, keeping the $keep fields so they needn't be retyped.
  * Only fields named in $keep are kept, so a password or token can't end up in the session by accident.
- * A field posted as a list (checkboxes, multi-selects) is kept as a list of strings.
+ * A field posted as a list (checkboxes, multi-selects) is kept as a list of strings, each cut to $maxLength characters.
+ * Line breaks are kept as \n, counting one character each as the browser's maxlength does (see post_text).
  */
-function back_with_error(string $path, string $message, array $keep): never
+function back_with_error(string $path, string $message, array $keep, int $maxLength = 255): never
 {
-    $clip = fn($v) => mb_substr($v, 0, 255);
+    $clip = fn($v) => mb_substr(str_replace("\r\n", "\n", $v), 0, $maxLength);
     $fields = [];
     foreach (array_intersect_key($_POST, array_flip($keep)) as $key => $value) {
         if (is_string($value)) {
@@ -206,10 +207,25 @@ function abort(int $code, string $message = ''): never
     exit;
 }
 
+/** A posted field as one string; one posted as a list (name[]=…), which no form here sends, counts as empty. */
+function posted_string(string $key): string
+{
+    $v = $_POST[$key] ?? '';
+    return is_string($v) ? $v : '';
+}
+
 function post_str(string $key, int $max = 255): string
 {
-    $v = trim((string)($_POST[$key] ?? ''));
-    return mb_substr($v, 0, $max);
+    return mb_substr(trim(posted_string($key)), 0, $max);
+}
+
+/**
+ * Text from a <textarea>, trimmed and cut to $max characters. Browsers send its line breaks as \r\n but count each as
+ * one character against maxlength, so they're stored as \n, or a full box would lose its end.
+ */
+function post_text(string $key, int $max): string
+{
+    return mb_substr(trim(str_replace("\r\n", "\n", posted_string($key))), 0, $max);
 }
 
 function post_int(string $key, int $default = 0): int

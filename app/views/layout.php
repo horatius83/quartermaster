@@ -48,6 +48,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
     <?= $nav('catalog', '/dm/catalog', 'Item catalog') ?>
     <?= $nav('carts', '/dm/carts', 'Cart review', render('partials/badge_oob', ['id' => 'cart-badge', 'count' => pending_cart_count(), 'inline' => true])) ?>
     <?= $nav('sales', '/dm/sales', 'Sale offers', render('partials/badge_oob', ['id' => 'sale-badge', 'count' => pending_sale_count(), 'inline' => true])) ?>
+    <?= $nav('requests', '/dm/requests', 'Player requests', render('partials/badge_oob', ['id' => 'request-badge', 'count' => open_request_count(), 'inline' => true, 'label' => 'requests waiting'])) ?>
     <?= $nav('party', '/dm/party', 'Party & logins') ?>
     <div class="nav-rule"></div>
     <?= $nav('campaigns', '/dm/campaigns', 'Campaigns') ?>
@@ -92,6 +93,7 @@ $nav = function (string $key, string $href, string $label, string $extra = '') u
         <?= $nav('shop', '/shop', 'Shops') ?>
         <?= $nav('pack', '/pack', 'My pack', $me ? render('partials/badge_oob', ['id' => 'offer-badge', 'count' => countered_sale_count((int)$me['id']), 'inline' => true, 'label' => 'counter-offers waiting']) : '') ?>
         <?= $nav('history', '/history', 'History') ?>
+        <?= $nav('requests', '/requests', 'Requests', $me ? render('partials/badge_oob', ['id' => 'reply-badge', 'count' => unseen_reply_count((int)$me['id']), 'inline' => true, 'label' => 'new replies from the DM']) : '') ?>
       </nav>
     </div>
     <div class="topbar-right">

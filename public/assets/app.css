@@ -235,6 +235,10 @@ h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.05; m
 .status-hidden, .status-declined, .status-rejected { background: var(--bark-soft); color: #4A3A2C; }
 .status-submitted, .status-pending { background: var(--ochre); color: var(--ink); }
 .status-countered { background: var(--clay-dark); color: #fff; }
+.status-closed { background: var(--bark-soft); color: #4A3A2C; }
+/* A player's request and the DM's reply keep the line breaks they were written with. */
+.request-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-snippet { overflow-wrap: anywhere; }
 .sell-form { text-align: left; padding: 8px 0 4px; min-width: 260px; }
 
 /* ---------- Controls ---------- */

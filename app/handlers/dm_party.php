@@ -22,14 +22,16 @@ function dm_dashboard(): void
     $partyCoin = array_sum(array_map(fn($c) => (int)$c['coin_cp'], $characters));
 
     page('dm/dashboard', [
-        'active'     => 'dashboard',
-        'characters' => $characters,
-        'pending'    => $pending,
-        'sales'      => sale_list("sa.status = 'pending'"),
-        'stores'     => $stores,
-        'openStores' => count(array_filter($stores, fn($s) => (int)$s['is_open'] === 1)),
-        'partyCoin'  => $partyCoin,
-        'campaign'   => current_campaign(),
+        'active'       => 'dashboard',
+        'characters'   => $characters,
+        'pending'      => $pending,
+        'sales'        => sale_list("sa.status = 'pending'"),
+        'requests'     => request_list("r.status = 'open'", limit: DASHBOARD_REQUESTS_SHOWN),
+        'requestCount' => open_request_count(),
+        'stores'       => $stores,
+        'openStores'   => count(array_filter($stores, fn($s) => (int)$s['is_open'] === 1)),
+        'partyCoin'    => $partyCoin,
+        'campaign'     => current_campaign(),
     ], 'Dashboard');
 }
 

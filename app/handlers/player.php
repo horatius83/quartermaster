@@ -294,3 +294,69 @@ function pack_sale_decline(int $saleId): void
     }
     back_to_pack("Turned down the offer for the {$sale['name']}. It stays in your pack.");
 }
+
+/** The player's requests to the DM, and the box to write a new one. Seeing a reply clears the Requests badge. */
+function player_requests(): void
+{
+    $char = require_player();
+    // Unseen replies come first, so the page always shows them however many requests there are, then those still open.
+    $requests = request_list(
+        'r.character_id = ?',
+        [$char['id']],
+        "CASE WHEN r.status = 'closed' AND r.dm_reply <> '' AND r.reply_seen_at IS NULL THEN 0 WHEN r.status = 'open' THEN 1 ELSE 2 END,
+         COALESCE(r.closed_at, r.created_at) DESC, r.id DESC",
+        REQUESTS_SHOWN
+    );
+    // Only the replies on the page count as seen; any beyond it keep the badge until a later visit shows them.
+    $shown = array_column(array_filter($requests, fn($r) => $r['status'] === 'closed' && $r['dm_reply'] !== '' && $r['reply_seen_at'] === null), 'id');
+    if ($shown) {
+        q(
+            'UPDATE requests SET reply_seen_at = ? WHERE character_id = ? AND id IN (' . implode(',', array_fill(0, count($shown), '?')) . ')',
+            [now(), $char['id'], ...$shown]
+        );
+    }
+    page('player/requests', [
+        'active'    => 'requests',
+        'char'      => $char,
+        'requests'  => $requests,
+        'openCount' => open_request_count_of((int)$char['id']),
+        'draft'     => (string)(take_old_input()['body'] ?? ''),
+    ], 'Requests');
+}
+
+/** Send the DM a request or comment. */
+function player_request_create(): void
+{
+    $char = require_player();
+    $body = post_text('body', MAX_REQUEST_CHARS);
+    if ($body === '') {
+        back_with_error('/requests', 'Write your request first.', []);
+    }
+    $full = transaction(function () use ($char, $body): int {
+        // Lock the character first, so two sends at once can't both count the same free slot.
+        q('SELECT id FROM characters WHERE id = ?' . for_update(), [$char['id']]);
+        $open = open_request_count_of((int)$char['id']);
+        if ($open >= MAX_OPEN_REQUESTS) {
+            return $open;
+        }
+        q(
+            "INSERT INTO requests (character_id, body, status, created_at) VALUES (?, ?, 'open', ?)",
+            [$char['id'], $body, now()]
+        );
+        return 0;
+    });
+    if ($full) {
+        back_with_error('/requests', "You have {$full} requests waiting on your DM. Withdraw one, or wait for an answer, before sending more.", ['body'], MAX_REQUEST_CHARS);
+    }
+    flash('Sent to your DM.');
+    redirect('/requests');
+}
+
+/** Take back a request the DM hasn't answered yet. */
+function player_request_withdraw(int $requestId): void
+{
+    $char = require_player();
+    $gone = q("DELETE FROM requests WHERE id = ? AND character_id = ? AND status = 'open'", [$requestId, $char['id']])->rowCount();
+    flash($gone ? 'Request withdrawn.' : 'Your DM has already answered that request.', $gone ? 'ok' : 'error');
+    redirect('/requests');
+}

@@ -801,6 +801,59 @@ function settle_sale(int $saleId, bool $byPlayer, ?int $seenPrice = null): void
     });
 }
 
+/** How long a player's request and the DM's reply to it can be. */
+const MAX_REQUEST_CHARS = 2000;
+const MAX_REQUEST_REPLY_CHARS = 1000;
+/** How many requests a player can have waiting on the DM at once, so a stuck key can't bury the DM's page. */
+const MAX_OPEN_REQUESTS = 20;
+/** How many of their requests a player's Requests page lists, and how many open ones the DM's dashboard does. */
+const REQUESTS_SHOWN = 30;
+const DASHBOARD_REQUESTS_SHOWN = 5;
+
+/** Requests waiting on the DM, for the sidebar badge. */
+function open_request_count(): int
+{
+    return (int)q_val(
+        "SELECT COUNT(*) FROM requests r JOIN characters ch ON ch.id = r.character_id WHERE r.status = 'open' AND ch.campaign_id = ?",
+        [campaign_id()]
+    );
+}
+
+/** How many of a character's requests are waiting on the DM. */
+function open_request_count_of(int $characterId): int
+{
+    return (int)q_val("SELECT COUNT(*) FROM requests WHERE character_id = ? AND status = 'open'", [$characterId]);
+}
+
+/** A character's requests the DM has replied to that they haven't seen yet, for the player's badge. */
+function unseen_reply_count(int $characterId): int
+{
+    return (int)q_val(
+        "SELECT COUNT(*) FROM requests WHERE character_id = ? AND status = 'closed' AND dm_reply <> '' AND reply_seen_at IS NULL",
+        [$characterId]
+    );
+}
+
+/**
+ * The current campaign's requests matching $where (on requests r and characters ch), each with its character's name.
+ * $order is the whole ORDER BY, so it should end with r.id (or r.id DESC) to keep requests sent in the same second in order.
+ */
+function request_list(string $where, array $params = [], string $order = 'r.created_at, r.id', int $limit = 0): array
+{
+    return q_all(
+        'SELECT r.*, ch.name AS character_name
+           FROM requests r
+           JOIN characters ch ON ch.id = r.character_id
+          WHERE ch.campaign_id = ? AND ' . $where . ' ORDER BY ' . $order . ($limit ? ' LIMIT ' . $limit : ''),
+        [campaign_id(), ...$params]
+    );
+}
+
+function request_detail(int $requestId): ?array
+{
+    return request_list('r.id = ?', [$requestId])[0] ?? null;
+}
+
 /** A name in the form the SRD import compares, since DMs usually type a straight apostrophe where the data has a curly one. */
 function srd_name_key(string $name): string
 {
