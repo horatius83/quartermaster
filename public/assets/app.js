@@ -158,6 +158,12 @@
     }
     p.input.value = opt.dataset.value;
     refreshDependents(p.input);
+    // A pick fills Price and Weight from the catalog again, even if it's the item already showing.
+    var details = itemDetailsFor(p.input);
+    if (details) {
+      delete details.dataset.filledFor;
+      htmx.trigger(p.input, 'qm-item-changed');
+    }
     // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
     var category = suggestCategory(p);
     var id = opt.dataset.categoryId;
@@ -347,7 +353,50 @@
     var p = suggestParts(evt.target.form.querySelector('.suggest'));
     if (p && p.toggle && p.list.dataset.mode === 'browse') browseSuggestions(p);
   });
+  // The stock form's description box (views/partials/item_details.php): what the catalog says about the item in the
+  // field it takes in (hx-include). Each time it's drawn for another item, its price and weight go into the form's
+  // Price and Weight, and its category into Category. A field still holding what was filled in goes back to its
+  // default when the name stops being a catalog item; one the DM has changed since is theirs and is left alone. A
+  // redraw for the item already filled in (moving out of the field after a pick, say) leaves the fields be.
+  function itemDetailsFor(input) {
+    var form = input.id && input.form;
+    return form ? form.querySelector('.item-details[hx-include="#' + input.id + '"]') : null;
+  }
+  document.addEventListener('htmx:afterSwap', function (evt) {
+    var box = evt.detail.target;
+    if (!box.classList || !box.classList.contains('item-details')) return;
+    var info = box.querySelector('[data-found]');
+    var form = box.closest('form');
+    if (!info || !form) return;
+    var found = info.dataset.found === '1';
+    var name = found ? info.dataset.name.toLowerCase() : '';
+    if (name === (box.dataset.filledFor || '')) return;
+    box.dataset.filledFor = name;
+    [['price', info.dataset.price], ['weight', info.dataset.weight]].forEach(function (pair) {
+      var field = form.querySelector('input[name="' + pair[0] + '"]');
+      if (!field) return;
+      if (found) {
+        field.value = pair[1];
+        field.dataset.autofilled = pair[1];
+      } else if (field.dataset.autofilled !== undefined) {
+        if (field.value === field.dataset.autofilled) field.value = field.defaultValue;
+        delete field.dataset.autofilled;
+      }
+    });
+    var category = form.querySelector('select[name="category_id"]');
+    var id = info.dataset.categoryId;
+    if (found && category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
+  });
+
   document.addEventListener('reset', function (evt) {
+    // The form's fields go back to their defaults, so nothing in them is filled in any more. Once they have, draw the
+    // description box again for the emptied item field.
+    Array.prototype.forEach.call(evt.target.querySelectorAll('.item-details'), function (box) {
+      delete box.dataset.filledFor;
+      Array.prototype.forEach.call(evt.target.querySelectorAll('[data-autofilled]'), function (field) { delete field.dataset.autofilled; });
+      var input = document.querySelector(box.getAttribute('hx-include'));
+      if (input) setTimeout(function () { htmx.trigger(input, 'qm-item-changed'); }, 0);
+    });
     Array.prototype.forEach.call(evt.target.querySelectorAll('.suggest'), function (box) {
       var p = suggestParts(box);
       if (!p) return;

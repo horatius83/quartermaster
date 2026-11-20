@@ -71,6 +71,12 @@
         </select>
       </label>
       <label class="field tiny">Weight <input name="weight" type="number" min="0" step="0.01" value="0"></label>
+      <?php // Picking an item (or typing its name and moving on) shows what the catalog says about it, and app.js fills in Price, Weight and Category from it. ?>
+      <div id="stock-item-details" class="field item-details" style="flex:1 1 100%" aria-live="polite"
+           hx-get="<?= e(url('/dm/catalog/details')) ?>" hx-include="#stock-item-input" hx-vals='{"for": "stock-item"}'
+           hx-trigger="qm-item-changed from:#stock-item-input, change from:#stock-item-input" hx-sync="this:replace" hx-target="this" hx-swap="innerHTML">
+        <?= render('partials/item_details', ['id' => 'stock-item', 'item' => null, 'name' => '']) ?>
+      </div>
       <button class="btn btn-primary" type="submit">Add to shelf</button>
     </form>
 

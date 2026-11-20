@@ -33,6 +33,12 @@ $filtered = function (string $cat, array $tags) use ($base): string {
         <?= category_tag($w['category'], $w['category_slug']) ?>
         <h2 class="card-title"><?= e($w['name']) ?></h2>
         <?php if ($w['notes'] !== ''): ?><p class="muted" style="margin:-4px 0 0"><?= e($w['notes']) ?></p><?php endif; ?>
+        <?php if (($w['description'] ?? '') !== ''): ?>
+        <details class="ware-desc">
+          <summary>About the <?= e($w['name']) ?></summary>
+          <p><?= e($w['description']) ?></p>
+        </details>
+        <?php endif; ?>
         <?php if ($w['tags']): ?>
         <div class="item-tags"><?php foreach ($w['tags'] as $tag): ?><span class="item-tag"><?= e($tag) ?></span><?php endforeach; ?></div>
         <?php endif; ?>

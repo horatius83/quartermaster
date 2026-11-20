@@ -104,6 +104,74 @@ test('DM stocks a shelf by picking a suggestion', async ({ page }) => {
   await expect(page.locator('#stock-body tr', { hasText: 'Torch' })).toHaveCount(1);
 });
 
+test('picking an item to stock fills in its price and weight and shows its description', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  const price = form.getByLabel('Price');
+  const weight = form.getByLabel('Weight');
+  const category = form.locator('select[name="category_id"]');
+  const description = form.getByLabel('Description');
+  await expect(description).toHaveAttribute('readonly', '');
+  await expect(description).toHaveValue('');
+
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(description).toHaveValue('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(price).toHaveValue('15 gp');
+  await expect(weight).toHaveValue('3');
+  await expect(category.locator('option:checked')).toHaveText('Weapon');
+
+  // Another catalog item replaces them, category and all.
+  await input.fill('');
+  await input.pressSequentially('potion of');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Potion of Healing/ }).click();
+  await expect(description).toHaveValue(/restores 2d4 \+ 2 hit points/);
+  await expect(price).toHaveValue('50 gp');
+  await expect(weight).toHaveValue('0.5');
+  await expect(category.locator('option:checked')).toHaveText('Consumable');
+
+  // A name that's new to the catalog has no description, and what was filled in goes back, but what the DM
+  // changed stays.
+  await weight.fill('2');
+  await input.fill('Potion of Gumption');
+  await input.blur();
+  await expect(description).toHaveValue('');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(price).toHaveValue('');
+  await expect(weight).toHaveValue('2');
+
+  // Typing a catalog item's name in full and moving on fills it in as a pick does.
+  await input.fill('torch');
+  await input.blur();
+  await expect(description).toHaveValue(/Burns for 1 hour/);
+  await expect(price).toHaveValue('1 cp');
+  await expect(weight).toHaveValue('1');
+
+  // A price changed after the fill is what goes on the shelf, and moving through the item field again keeps it.
+  await price.fill('3 cp');
+  await input.focus();
+  await input.blur();
+  await page.waitForTimeout(300);
+  await expect(price).toHaveValue('3 cp');
+  await form.getByRole('button', { name: 'Add to shelf' }).click();
+  await expect(page.getByLabel('Price of Torch')).toHaveValue('3 cp');
+  // The form empties for the next item, description too.
+  await expect(input).toHaveValue('');
+  await expect(price).toHaveValue('');
+  await expect(description).toHaveValue('');
+  await expect(description).toHaveAttribute('placeholder', 'Pick an item to read its description.');
+});
+
+test('an item with no description says so', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  await form.getByRole('combobox', { name: 'Stock an item' }).pressSequentially('quive');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Quiver/ }).click();
+  await expect(form.getByLabel('Description')).toHaveAttribute('placeholder', 'The catalog has no description of Quiver.');
+  await expect(form.getByLabel('Price')).toHaveValue('1 gp');
+});
+
 test('the ▾ button lists the chosen category A–Z, and Category switches it', async ({ openPage, browserName }) => {
   test.skip(browserName === 'firefox', 'Firefox has no mobile emulation');
   const page = await openPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
