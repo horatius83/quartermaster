@@ -135,24 +135,24 @@ test('picking an item to stock fills in its price and weight and shows its descr
   // changed stays.
   await weight.fill('2');
   await input.fill('Potion of Gumption');
-  await input.blur();
-  await expect(description).toHaveValue('');
-  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
   await expect(price).toHaveValue('');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(description).toHaveValue('');
   await expect(weight).toHaveValue('2');
 
-  // Typing a catalog item's name in full and moving on fills it in as a pick does.
+  // Typing a catalog item's name in full fills in what the DM hasn't changed: Price, but not their Weight.
   await input.fill('torch');
-  await input.blur();
   await expect(description).toHaveValue(/Burns for 1 hour/);
   await expect(price).toHaveValue('1 cp');
-  await expect(weight).toHaveValue('1');
+  await expect(weight).toHaveValue('2');
 
-  // A price changed after the fill is what goes on the shelf, and moving through the item field again keeps it.
+  // A price changed after the fill is the DM's, so typing the name again keeps it.
   await price.fill('3 cp');
-  await input.focus();
-  await input.blur();
-  await page.waitForTimeout(300);
+  const redrawn = page.waitForResponse(/\/dm\/catalog\/details\?item=Torch/);
+  await input.fill('Torc');
+  await input.fill('Torch');
+  await redrawn;
+  await expect(description).toHaveValue(/Burns for 1 hour/);
   await expect(price).toHaveValue('3 cp');
   await form.getByRole('button', { name: 'Add to shelf' }).click();
   await expect(page.getByLabel('Price of Torch')).toHaveValue('3 cp');
@@ -161,6 +161,48 @@ test('picking an item to stock fills in its price and weight and shows its descr
   await expect(price).toHaveValue('');
   await expect(description).toHaveValue('');
   await expect(description).toHaveAttribute('placeholder', 'Pick an item to read its description.');
+
+  // A pick fills Price over one the DM typed first, since that's what picking is for.
+  await price.fill('9 gp');
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(price).toHaveValue('15 gp');
+});
+
+test('stocking straight after retyping the item doesn’t use the old item’s price', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(form.getByLabel('Price')).toHaveValue('15 gp');
+  // The description box never catches up before Enter.
+  await page.route(/\/dm\/catalog\/details/, () => {});
+  await input.fill('Torch');
+  await expect(form.getByLabel('Price')).toHaveValue('');
+  await input.press('Enter');
+  await expect(page.getByLabel('Price of Torch')).toHaveValue('1 cp');
+});
+
+test('a slow catalog reply doesn’t overwrite a price typed while it was on its way', async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(/\/dm\/catalog\/details\?item=Torch/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  await form.getByRole('combobox', { name: 'Stock an item' }).pressSequentially('torc');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Torch/ }).click();
+  await form.getByLabel('Price').fill('3 cp');
+  const reply = page.waitForResponse(/\/dm\/catalog\/details\?item=Torch/);
+  release();
+  await reply;
+  await expect(form.getByLabel('Description')).toHaveValue(/Burns for 1 hour/);
+  await expect(form.getByLabel('Price')).toHaveValue('3 cp');
+  // Weight wasn't touched meanwhile, so it's filled in.
+  await expect(form.getByLabel('Weight')).toHaveValue('1');
 });
 
 test('an item with no description says so', async ({ page }) => {

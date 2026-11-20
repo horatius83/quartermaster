@@ -60,8 +60,7 @@ transaction(function () use ($cat) {
         'Shield'            => "Carried in one hand. +2 to Armor Class while you wield it.",
         'Potion of Healing' => "A red liquid that glimmers when shaken. Drinking it restores 2d4 + 2 hit points.",
         'Torch'             => "Burns for 1 hour, shedding bright light for 20 feet and dim light for 20 feet beyond.",
-        'Bag of Holding'    => "Its inside is far larger than its outside: up to 500 pounds, not exceeding 64 cubic feet.
-It always weighs 15 pounds, whatever it holds.",
+        'Bag of Holding'    => "Its inside is far larger than its outside: up to 500 pounds, not exceeding 64 cubic feet.\nIt always weighs 15 pounds, whatever it holds.",
         'Driftglobe'        => "A small glass sphere that sheds light on command and can hover 5 feet off the ground.",
     ];
     foreach ($descriptions as $itemName => $text) {
