@@ -87,6 +87,11 @@ $routes = [
     ['POST', '/dm/sales/{id}/counter',     'dm_sale_counter'],
     ['POST', '/dm/sales/{id}/reject',      'dm_sale_reject'],
 
+    // DM: players' requests and comments
+    ['GET',  '/dm/requests',               'dm_requests'],
+    ['POST', '/dm/requests/{id}/reply',    'dm_request_reply'],
+    ['POST', '/dm/requests/{id}/close',    'dm_request_close'],
+
     // Player
     ['GET',  '/shop',                      'shop_index'],
     ['GET',  '/shop/{id}',                 'shop'],
@@ -100,6 +105,9 @@ $routes = [
     ['POST', '/pack/sales/{id}/accept',    'pack_sale_accept'],
     ['POST', '/pack/sales/{id}/decline',   'pack_sale_decline'],
     ['GET',  '/history',                   'player_history'],
+    ['GET',  '/requests',                  'player_requests'],
+    ['POST', '/requests',                  'player_request_create'],
+    ['POST', '/requests/{id}/withdraw',    'player_request_withdraw'],
 ];
 
 dispatch($routes, $_SERVER['REQUEST_METHOD'] ?? 'GET', request_path());

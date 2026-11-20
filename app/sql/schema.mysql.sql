@@ -182,6 +182,21 @@ CREATE TABLE sales (
   CONSTRAINT fk_sales_item FOREIGN KEY (item_id) REFERENCES items(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Notes players send the DM: asking for an item, a question, a comment. Open until the DM closes it, with or without
+-- a reply; reply_seen_at is when the player first saw the reply, so their Requests link shows a badge until then.
+CREATE TABLE requests (
+  id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  character_id  INT UNSIGNED NOT NULL,
+  body          VARCHAR(2000) NOT NULL,
+  status        ENUM('open','closed') NOT NULL DEFAULT 'open',
+  dm_reply      VARCHAR(1000) NOT NULL DEFAULT '',
+  created_at    DATETIME NOT NULL,
+  closed_at     DATETIME NULL,
+  reply_seen_at DATETIME NULL,
+  KEY ix_requests_character (character_id, status),
+  CONSTRAINT fk_requests_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (

@@ -150,6 +150,20 @@ CREATE TABLE sales (
 );
 CREATE INDEX ix_sales_character ON sales (character_id, status);
 
+-- Notes players send the DM: asking for an item, a question, a comment. Open until the DM closes it, with or without
+-- a reply; reply_seen_at is when the player first saw the reply, so their Requests link shows a badge until then.
+CREATE TABLE requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  character_id  INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  body          TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  dm_reply      TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL,
+  closed_at     TEXT NULL,
+  reply_seen_at TEXT NULL
+);
+CREATE INDEX ix_requests_character ON requests (character_id, status);
+
 -- Every change to a pack or purse. quantity and coin_cp are signed deltas.
 -- character_name, item_name and actor_name are copied in so the history survives renames and deletions.
 CREATE TABLE inventory_log (
