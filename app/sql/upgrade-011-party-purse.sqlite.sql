@@ -1,5 +1,5 @@
 -- Adds the party purse: a campaign can pool its party's coin in one purse, and keep a stash of items any of them can use.
--- The app runs this itself. By hand: sqlite3 storage/quartermaster.sqlite < app/sql/upgrade-010-party-purse.sqlite.sql   (run once)
+-- The app runs this itself. By hand: sqlite3 storage/quartermaster.sqlite < app/sql/upgrade-011-party-purse.sqlite.sql   (run once)
 
 ALTER TABLE campaigns ADD COLUMN shared_purse INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE campaigns ADD COLUMN purse_cp INTEGER NOT NULL DEFAULT 0;

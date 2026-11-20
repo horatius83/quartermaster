@@ -1,6 +1,6 @@
 <?php
-// Checks item tags, rulesets and sales against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
-// upgrades 005, 006, 008, 009 and 010 run, that 006, 009 and 010 finish if interrupted, that the tag column stores, sorts and
+// Checks item tags, rulesets, sales and requests against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
+// upgrades 005, 006, 008, 009, 010 and 011 run, that 006, 009 and 011 finish if interrupted, that the tag column stores, sorts and
 // cascades the way the app relies on, and that a sale settles and the party stash moves under MySQL's row locks. Run by
 // tests/mysql/run.mjs.
 declare(strict_types=1);
@@ -9,7 +9,7 @@ putenv('QM_CONFIG=' . __DIR__ . '/config.php');
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $cfg = (require __DIR__ . '/config.php')['mysql'];
 
-// Build the current schema, then undo upgrades 010, 009, 008, 006 and 005: a database from just before them.
+// Build the current schema, then undo upgrades 011, 010, 009, 008, 006 and 005: a database from just before them.
 $raw = new PDO("mysql:host={$cfg['host']};dbname={$cfg['database']};charset=utf8mb4", $cfg['username'], $cfg['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $schema = preg_replace('/^\s*--.*$/m', '', file_get_contents(__DIR__ . '/../../app/sql/schema.mysql.sql'));
 foreach (array_filter(array_map('trim', explode(';', $schema))) as $statement) {
@@ -21,6 +21,7 @@ $undoPartyPurse = function () use ($raw): void {
     $raw->exec('ALTER TABLE campaigns DROP COLUMN purse_cp, DROP COLUMN shared_purse');
 };
 $undoPartyPurse();
+$raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
 $raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
@@ -41,6 +42,7 @@ $tagsOf = fn(int $id) => with_item_tags([['id' => $id]])[0]['tags'];
 
 $check('upgrade 005 created the table', 0, (int)q_val('SELECT COUNT(*) FROM item_tags'));
 $check('upgrade 008 created the sales table', 0, (int)q_val('SELECT COUNT(*) FROM sales'));
+$check('upgrade 010 created the requests table', 0, (int)q_val('SELECT COUNT(*) FROM requests'));
 $indexes = fn() => array_column(q_all("SHOW INDEX FROM items WHERE Key_name LIKE 'uq_items%'"), 'Key_name');
 $check('upgrade 006 made names unique per ruleset', ['uq_items_ruleset_name', 'uq_items_ruleset_name'], $indexes());
 $check('upgrade 006 gave campaigns a ruleset', 'ruleset', q_one('SHOW COLUMNS FROM campaigns WHERE Field = ?', ['ruleset'])['Field'] ?? null);
@@ -48,16 +50,17 @@ $uniqueOn = fn(string $table) => array_values(array_unique(array_column(q_all("S
 $check('upgrade 009 made shelf lines unique with their notes', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
 $check('upgrade 009 made cart lines unique with their notes', ['uq_cart_item_notes'], $uniqueOn('cart_items'));
 $columnsOf = fn(string $table, array $names) => array_values(array_intersect($names, array_column(q_all("SHOW COLUMNS FROM {$table}"), 'Field')));
-$check('upgrade 010 gave campaigns a party purse', ['shared_purse', 'purse_cp'], $columnsOf('campaigns', ['shared_purse', 'purse_cp']));
-$check('upgrade 010 created the party stash', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
+$check('upgrade 011 gave campaigns a party purse', ['shared_purse', 'purse_cp'], $columnsOf('campaigns', ['shared_purse', 'purse_cp']));
+$check('upgrade 011 created the party stash', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
 
-// Upgrade 010 stopped before its table: the next run skips the columns that are there and makes it.
+// Upgrade 011 stopped before its table: the next run skips the columns that are there and makes it.
 $raw->exec('DROP TABLE party_items');
 apply_upgrades(db());
-$check('an interrupted upgrade 010 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
+$check('an interrupted upgrade 011 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
 
-// Upgrade 009 stopped after its first table: the next run skips that one and does the other. Upgrade 010 never ran
-// after it, so it's undone too (the app only looks further when the newest one is missing).
+// Upgrade 009 stopped after its first table: the next run skips that one and does the other. Upgrades 010 and 011
+// never ran after it, so they're undone too (the app only looks further when the newest one is missing).
+$raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
 $undoPartyPurse();
 apply_upgrades(db());
@@ -75,6 +78,7 @@ $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id
 $raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
 $undoPartyPurse();
+$raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');
 apply_upgrades(db());
 $check('an interrupted upgrade 006 is finished by the next run', 'ruleset', q_one('SHOW COLUMNS FROM campaigns WHERE Field = ?', ['ruleset'])['Field'] ?? null);
@@ -238,6 +242,14 @@ $check('notes differing only in case are two shelf lines', 2, (int)q_val('SELECT
 $check('the longest notes are kept whole', $longestNotes, q_val('SELECT notes FROM store_stock WHERE store_id = ? AND notes LIKE ?', [$shop, 'é%']));
 q('DELETE FROM stores WHERE id = ?', [$shop]);
 q('DELETE FROM items WHERE id = ?', [$scroll]);
+
+// The longest request and reply the forms allow fit, and they go when their character does.
+$writer = insert('INSERT INTO characters (campaign_id, name, created_at) VALUES (?, ?, ?)', [$other, 'Writer', now()]);
+$longestRequest = str_repeat("é\n", MAX_REQUEST_CHARS / 2);
+$request = insert("INSERT INTO requests (character_id, body, dm_reply, created_at) VALUES (?, ?, ?, ?)", [$writer, $longestRequest, str_repeat('é', MAX_REQUEST_REPLY_CHARS), now()]);
+$check('the longest request and reply are kept whole', [$longestRequest, MAX_REQUEST_REPLY_CHARS], [q_val('SELECT body FROM requests WHERE id = ?', [$request]), mb_strlen(q_val('SELECT dm_reply FROM requests WHERE id = ?', [$request]))]);
+q('DELETE FROM characters WHERE id = ?', [$writer]);
+$check('a character’s requests go with them', 0, (int)q_val('SELECT COUNT(*) FROM requests WHERE character_id = ?', [$writer]));
 
 $secondPage = catalog_page('', '', [], 2);
 $check('a catalog page holds one page of items', [CATALOG_PAGE_SIZE, 2, CATALOG_PAGE_SIZE + 1], [count($secondPage['items']), $secondPage['page'], $secondPage['first']]);

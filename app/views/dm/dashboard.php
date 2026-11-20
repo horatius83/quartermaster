@@ -103,6 +103,22 @@
       </section>
       <?php endif; ?>
 
+      <?php if ($requests): ?>
+      <section class="card-stack" aria-labelledby="requests-h">
+        <h2 id="requests-h" class="section-title">Player requests</h2>
+        <?php foreach ($requests as $request): ?>
+          <a class="card card-dashed" style="text-decoration:none;color:inherit" href="<?= e(url('/dm/requests')) ?>">
+            <strong style="font-size:20px"><?= e($request['character_name']) ?></strong>
+            <span class="muted small"> · <?= e(time_ago($request['created_at'])) ?></span><br>
+            <span class="muted small request-snippet"><?= e(mb_strimwidth(preg_replace('/\s+/u', ' ', $request['body']), 0, 90, '…')) ?></span>
+          </a>
+        <?php endforeach; ?>
+        <?php if ($requestCount > count($requests)): ?>
+          <a href="<?= e(url('/dm/requests')) ?>">and <?= $requestCount - count($requests) ?> more →</a>
+        <?php endif; ?>
+      </section>
+      <?php endif; ?>
+
       <section class="card-stack" aria-labelledby="stores-h">
         <h2 id="stores-h" class="section-title">Stores</h2>
         <?php if (!$stores): ?><p class="muted" style="margin:0">No stores yet. <a href="<?= e(url('/dm/stores')) ?>">Open one</a>.</p><?php else: ?>
