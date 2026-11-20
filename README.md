@@ -169,7 +169,7 @@ tests/mysql/       checks of item tags, rulesets, sales, requests and the SRD da
 
 ## How htmx is used
 
-Every page is rendered on the server. `<body hx-boost="true">` turns ordinary links and forms into partial page swaps. Interactive bits post to small endpoints that return just the HTML fragment to replace:
+Every page is rendered on the server. `<body hx-boost="true">` turns ordinary links and forms into partial page swaps. A link whose page redirects (*Player inventories* to the first pack, *Shops* to the first shop) gets a plain redirect, which is followed inside the swap; a form that redirects gets `HX-Redirect`, a full page load. Interactive bits post to small endpoints that return just the HTML fragment to replace:
 
 | Interaction | Request | Swaps |
 | --- | --- | --- |
