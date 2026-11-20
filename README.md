@@ -189,3 +189,7 @@ Messages are sent as an `HX-Trigger: {"qm-toast": …}` header and shown by `pub
 - All SQL uses prepared statements.
 - All output is escaped with `e()`.
 - Players can only see their own pack, history, carts, offers to sell and requests, and only the stores the DM has opened to them.
+
+## License
+
+Quartermaster's code is under the [MIT License](LICENSE). The SRD data in `app/data/srd-*.php` isn't: it keeps the licenses it was published with (CC BY 4.0 for SRD 5.1, the Open Game License 1.0a for the 3.5e SRD), as described in *Systems and the SRD items*.
