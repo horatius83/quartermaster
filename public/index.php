@@ -34,6 +34,7 @@ $routes = [
     ['GET',  '/dm/campaigns',              'dm_campaigns'],
     ['POST', '/dm/campaigns',              'dm_campaign_create'],
     ['POST', '/dm/campaigns/{id}/ruleset', 'dm_campaign_set_ruleset'],
+    ['POST', '/dm/campaigns/{id}/purse',   'dm_campaign_purse'],
     ['POST', '/dm/campaigns/switch',       'dm_campaign_switch'],
     ['POST', '/dm/campaigns/{id}',         'dm_campaign_update'],
     ['POST', '/dm/campaigns/{id}/delete',  'dm_campaign_delete'],
@@ -54,7 +55,16 @@ $routes = [
     ['POST', '/dm/inv/{id}/move',          'dm_inv_move'],
     ['POST', '/dm/inv/{id}/delete',        'dm_inv_delete'],
     ['GET',  '/dm/history',                'dm_history'],
+    ['GET',  '/dm/history/party',          'dm_history_party'],
     ['GET',  '/dm/history/{id}',           'dm_history_character'],
+
+    // DM: the party purse and stash, when a campaign shares one
+    ['GET',  '/dm/party-stash',            'dm_party_stash'],
+    ['POST', '/dm/party-stash/purse',      'dm_party_stash_purse'],
+    ['POST', '/dm/party-stash/give',       'dm_party_stash_give'],
+    ['POST', '/dm/stash/{id}/qty',         'dm_stash_qty'],
+    ['POST', '/dm/stash/{id}/move',        'dm_stash_move'],
+    ['POST', '/dm/stash/{id}/delete',      'dm_stash_delete'],
 
     // DM: stores
     ['GET',  '/dm/stores',                 'dm_stores_index'],
@@ -101,6 +111,8 @@ $routes = [
     ['POST', '/shop/line/{id}',            'shop_line_qty'],
     ['GET',  '/pack',                      'player_pack'],
     ['POST', '/pack/{id}/sell',            'pack_sell'],
+    ['POST', '/pack/{id}/stash',           'pack_to_party'],
+    ['POST', '/pack/stash/{id}/take',      'pack_take_from_party'],
     ['POST', '/pack/sales/{id}/withdraw',  'pack_sale_withdraw'],
     ['POST', '/pack/sales/{id}/accept',    'pack_sale_accept'],
     ['POST', '/pack/sales/{id}/decline',   'pack_sale_decline'],

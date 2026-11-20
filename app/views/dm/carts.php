@@ -1,7 +1,7 @@
 <main class="main">
   <header>
     <h1 class="page-title">Carts awaiting your nod</h1>
-    <p class="muted" style="margin:6px 0 0;max-width:680px">Approving a cart takes the coin from the player’s purse, puts the items in their pack and lowers the store’s stock. Change a quantity to adjust a cart before you approve it (0 removes the line).</p>
+    <p class="muted" style="margin:6px 0 0;max-width:680px">Approving a cart takes the coin from the player’s purse (or the party purse, if the party shares one), puts the items in their pack and lowers the store’s stock. Change a quantity to adjust a cart before you approve it (0 removes the line).</p>
   </header>
 
   <?php if (!$pending): ?><div class="card empty">No carts are waiting. Players send them from the shops you open.</div><?php endif; ?>

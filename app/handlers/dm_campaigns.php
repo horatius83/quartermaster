@@ -71,6 +71,25 @@ function dm_campaign_set_ruleset(int $id): void
     redirect('/dm/campaigns');
 }
 
+/** Start sharing a party purse (pooling everyone's coin) or stop (splitting it evenly between them). */
+function dm_campaign_purse(int $id): void
+{
+    require_dm();
+    $on = post_str('shared', 1) === '1';
+    try {
+        [$campaign, $moved] = set_shared_purse($id, $on);
+    } catch (PDOException $e) {
+        throw $e;
+    } catch (RuntimeException $e) {
+        flash($e->getMessage(), 'error');
+        redirect('/dm/campaigns');
+    }
+    flash($on
+        ? "{$campaign['name']}’s party now shares one purse, holding " . coins($moved) . '. Players can put items in the party stash from their packs.'
+        : "{$campaign['name']}’s party has purses of their own again: " . coins($moved) . ' was split between them. Anything left in the party stash waits there for you to hand out.');
+    redirect('/dm/campaigns');
+}
+
 /** Show another campaign on every DM screen. Goes to the dashboard, since the page you were on belongs to the old one. */
 function dm_campaign_switch(): void
 {
@@ -94,8 +113,12 @@ function dm_campaign_delete(int $id): void
             if (!$campaign) {
                 throw new RuntimeException('That campaign is already gone.');
             }
-            if (q_val('SELECT 1 FROM characters WHERE campaign_id = ? UNION ALL SELECT 1 FROM stores WHERE campaign_id = ? LIMIT 1', [$id, $id])) {
-                throw new RuntimeException("Remove {$campaign['name']}’s characters and stores before deleting it.");
+            if (q_val(
+                'SELECT 1 FROM characters WHERE campaign_id = ? UNION ALL SELECT 1 FROM stores WHERE campaign_id = ?
+                 UNION ALL SELECT 1 FROM party_items WHERE campaign_id = ? LIMIT 1',
+                [$id, $id, $id]
+            )) {
+                throw new RuntimeException("Remove {$campaign['name']}’s characters, stores and party stash before deleting it.");
             }
             if ((int)q_val('SELECT COUNT(*) FROM campaigns WHERE owner_user_id = ?', [owner_id()]) === 1) {
                 throw new RuntimeException('This is your only campaign, so it stays.');

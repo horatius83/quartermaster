@@ -64,10 +64,17 @@ function htmx_target(): ?string
     return $_SERVER['HTTP_HX_TARGET'] ?? null;
 }
 
+/**
+ * Send the browser to $path. A boosted link (a GET, such as Player inventories going to the first pack) gets a plain
+ * redirect, which the browser follows inside htmx's request, so the page it lands on is swapped in like any other
+ * link's. Anything else htmx sent, such as a form, gets HX-Redirect, a full page load.
+ */
 function redirect(string $path): never
 {
     $to = url($path);
-    if (is_htmx()) {
+    if (is_htmx() && isset($_SERVER['HTTP_HX_BOOSTED']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        header('Location: ' . $to, true, 303);
+    } elseif (is_htmx()) {
         header('HX-Redirect: ' . $to);
     } else {
         header('Location: ' . $to, true, 303);

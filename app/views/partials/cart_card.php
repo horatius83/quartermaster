@@ -46,10 +46,11 @@ $when = $pending ? 'sent ' . time_ago($cart['submitted_at']) : strtolower($label
 
   <?php if ($pending): ?>
     <p class="notice <?= $short ? 'notice-err' : 'notice-ok' ?>" style="margin:0">
+      <?php $purseName = (int)$cart['shared_purse'] ? 'party purse' : 'purse'; ?>
       <?php if ($short): ?>
-        Short on coin: purse holds <?= e(coins((int)$cart['coin_cp'])) ?>, needs <?= e(coins($cart['total_cp'] - (int)$cart['coin_cp'])) ?> more.
+        Short on coin: <?= $purseName ?> holds <?= e(coins((int)$cart['coin_cp'])) ?>, needs <?= e(coins($cart['total_cp'] - (int)$cart['coin_cp'])) ?> more.
       <?php else: ?>
-        Purse: <?= e(coins((int)$cart['coin_cp'])) ?> → <?= e(coins((int)$cart['coin_cp'] - $cart['total_cp'])) ?> after purchase.
+        <?= ucfirst($purseName) ?>: <?= e(coins((int)$cart['coin_cp'])) ?> → <?= e(coins((int)$cart['coin_cp'] - $cart['total_cp'])) ?> after purchase.
       <?php endif; ?>
     </p>
     <div class="actions">

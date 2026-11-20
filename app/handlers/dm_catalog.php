@@ -44,6 +44,7 @@ function catalog_select(array $query, string $suffix = ''): array
     return with_item_tags(q_all(
         'SELECT i.*, cat.name AS category, cat.slug AS category_slug,
                 (SELECT COUNT(*) FROM inventory inv WHERE inv.item_id = i.id)
+              + (SELECT COUNT(*) FROM party_items pi WHERE pi.item_id = i.id)
               + (SELECT COUNT(*) FROM store_stock st WHERE st.item_id = i.id)
               + (SELECT COUNT(*) FROM cart_items ci WHERE ci.item_id = i.id)
               + (SELECT COUNT(*) FROM sales sa WHERE sa.item_id = i.id AND sa.status IN ' . OPEN_SALE_STATUSES . ') AS uses'
@@ -221,7 +222,7 @@ function dm_catalog_delete(int $id): void
     require_dm();
     $item = catalog_item($id) ?? abort(404, 'No such item.');
     if ((int)$item['uses'] > 0) {
-        htmx_fail("{$item['name']} is in a pack, a store, a cart or an open offer to sell, so it can’t be deleted.");
+        htmx_fail("{$item['name']} is in a pack, a party stash, a store, a cart or an open offer to sell, so it can’t be deleted.");
     }
     // Settled offers to sell go with it; the pack history keeps what was sold.
     transaction(function () use ($id) {

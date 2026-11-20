@@ -19,7 +19,8 @@ function dm_dashboard(): void
         [campaign_id()]
     );
     $stores = stores_summary();
-    $partyCoin = array_sum(array_map(fn($c) => (int)$c['coin_cp'], $characters));
+    $purse = party_purse();
+    $partyCoin = (int)$purse['coin_cp'] + array_sum(array_map(fn($c) => (int)$c['coin_cp'], $characters));
 
     page('dm/dashboard', [
         'active'       => 'dashboard',
@@ -31,6 +32,8 @@ function dm_dashboard(): void
         'stores'       => $stores,
         'openStores'   => count(array_filter($stores, fn($s) => (int)$s['is_open'] === 1)),
         'partyCoin'    => $partyCoin,
+        'purse'        => $purse,
+        'shared'       => shares_purse(),
         'campaign'     => current_campaign(),
     ], 'Dashboard');
 }
@@ -41,6 +44,7 @@ function dm_party(): void
     page('dm/party', [
         'active'     => 'party',
         'characters' => characters_with_load(),
+        'shared'     => shares_purse(),
     ], 'Party & logins');
 }
 
@@ -144,7 +148,7 @@ function dm_party_password(int $characterId): void
             $row = $c;
         }
     }
-    fragment('partials/party_row', ['c' => $row]);
+    fragment('partials/party_row', ['c' => $row, 'shared' => shares_purse()]);
 }
 
 function dm_party_delete(int $characterId): void
