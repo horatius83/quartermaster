@@ -26,7 +26,8 @@
       <tbody>
         <?php foreach ($campaigns as $c):
           $isCurrent = (int)$c['id'] === (int)($current['id'] ?? 0);
-          $isEmpty = (int)$c['character_count'] === 0 && (int)$c['store_count'] === 0; ?>
+          $isEmpty = (int)$c['character_count'] === 0 && (int)$c['store_count'] === 0 && (int)$c['stash_count'] === 0;
+          $shared = shares_purse($c); ?>
           <tr id="campaign-<?= (int)$c['id'] ?>">
             <td>
               <form class="move-form" method="post" action="<?= e(url('/dm/campaigns/' . $c['id'])) ?>">
@@ -51,7 +52,23 @@
                 <?= e(ruleset_label($c['ruleset'])) ?>
               <?php endif; ?>
             </td>
-            <td class="nowrap"><?= (int)$c['character_count'] ?> <?= (int)$c['character_count'] === 1 ? 'adventurer' : 'adventurers' ?></td>
+            <td>
+              <div class="nowrap"><?= (int)$c['character_count'] ?> <?= (int)$c['character_count'] === 1 ? 'adventurer' : 'adventurers' ?></div>
+              <form class="nowrap small" method="post" action="<?= e(url('/dm/campaigns/' . $c['id'] . '/purse')) ?>" style="display:flex;flex-direction:column;align-items:flex-start"
+                    hx-confirm="<?= e($shared
+                      ? "Stop sharing {$c['name']}’s purse? Its " . coins((int)$c['purse_cp']) . ' is split evenly between the party, and anything in the party stash waits there for you to hand out.'
+                      : "Share one purse across {$c['name']}’s party? Everyone’s coin goes into it, purchases are paid from it and sales paid into it, and players can put items in a party stash.") ?>">
+                <?= csrf_field() ?>
+                <input type="hidden" name="shared" value="<?= $shared ? '0' : '1' ?>">
+                <?php if ($shared): ?>
+                  <span class="muted">One shared purse</span>
+                  <button class="link-btn" type="submit">Stop sharing</button>
+                <?php else: ?>
+                  <span class="muted">Purses of their own</span>
+                  <button class="link-btn" type="submit">Share one purse</button>
+                <?php endif; ?>
+              </form>
+            </td>
             <td class="nowrap"><?= (int)$c['store_count'] ?></td>
             <td class="nowrap muted"><?= e(substr($c['created_at'], 0, 10)) ?></td>
             <td class="right nowrap">
@@ -76,5 +93,6 @@
       </tbody>
     </table>
   </div>
-  <p class="muted small" style="margin:0">A new campaign’s system can’t be changed. A campaign can be deleted once its characters and stores are gone, so if you pick the wrong system, start another and delete the empty one.</p>
+  <p class="muted small" style="margin:0">A new campaign’s system can’t be changed. A campaign can be deleted once its characters, stores and party stash are gone, so if you pick the wrong system, start another and delete the empty one.</p>
+  <p class="muted small" style="margin:0">A shared party purse pools everyone’s coin: carts are paid from it, sales are paid into it, and players can put items from their packs in the party stash for anyone to take. Stopping splits the purse evenly between the party.</p>
 </main>

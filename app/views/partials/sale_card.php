@@ -59,7 +59,7 @@ $fid = 'sale-' . (int)$sale['id'];
     <p class="notice notice-warn" style="margin:0">Waiting on the player to accept or decline. You can change your offer, take it back, or accept their asking price after all.</p>
   <?php endif; ?>
   <?php if ($open): ?>
-    <p class="notice notice-ok" style="margin:0">Purse: <?= e(coins((int)$sale['coin_cp'])) ?> → <?= e(coins((int)$sale['coin_cp'] + (int)$sale['asking_cp'])) ?> at the asking price.</p>
+    <p class="notice notice-ok" style="margin:0"><?= (int)$sale['shared_purse'] ? 'Party purse' : 'Purse' ?>: <?= e(coins((int)$sale['coin_cp'])) ?> → <?= e(coins((int)$sale['coin_cp'] + (int)$sale['asking_cp'])) ?> at the asking price.</p>
     <div class="actions">
       <button class="btn btn-go" type="button" style="flex:1 1 120px"
         hx-post="<?= e(url('/dm/sales/' . $sale['id'] . '/accept')) ?>" hx-target="closest article" hx-swap="outerHTML">Accept <?= e(coins((int)$sale['asking_cp'])) ?></button>

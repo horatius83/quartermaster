@@ -1,5 +1,6 @@
 <?php
-$coin = (int)$char['coin_cp'];
+$coin = spendable_cp($char);
+$shared = shares_purse();
 $waiting = $cart && $cart['status'] === 'submitted';
 $lines = $cart['lines'] ?? [];
 $total = $cart['total_cp'] ?? 0;
@@ -44,8 +45,8 @@ $total = $cart['total_cp'] ?? 0;
   <?php if ($lines): ?>
     <p class="notice <?= $total > $coin ? 'notice-err' : 'notice-ok' ?>" style="margin:0">
       <?= $total > $coin
-        ? 'That’s ' . e(coins($total - $coin)) . ' more than your purse holds.'
-        : 'You’ll have ' . e(coins($coin - $total)) . ' left.' ?>
+        ? 'That’s ' . e(coins($total - $coin)) . ($shared ? ' more than the party purse holds.' : ' more than your purse holds.')
+        : ($shared ? 'The party purse will have ' : 'You’ll have ') . e(coins($coin - $total)) . ' left.' ?>
     </p>
   <?php endif; ?>
 
@@ -58,7 +59,7 @@ $total = $cart['total_cp'] ?? 0;
         <textarea name="player_note" rows="2" maxlength="500" placeholder="Haggling? Trading something in?"></textarea>
       </label>
       <button class="btn btn-primary btn-big" type="submit">Send to DM for approval</button>
-      <p class="muted small" style="margin:0;text-align:center">Coin is only spent once your DM approves.</p>
+      <p class="muted small" style="margin:0;text-align:center"><?= $shared ? 'It’s paid from the party purse, once your DM approves.' : 'Coin is only spent once your DM approves.' ?></p>
     </form>
   <?php endif; ?>
 </aside>

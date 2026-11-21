@@ -186,6 +186,27 @@ test('a DM whose campaigns still have a party can’t be deleted', async ({ page
   await expect(userRow(page, 'dm')).toBeVisible();
 });
 
+test('a DM whose campaign still has a party stash can’t be deleted', async ({ page }) => {
+  await signInAsAdmin(page);
+  await addLogin(page, 'morgan', 'dungeon456');
+  await expect(toasts(page)).toContainText('morgan can now sign in');
+  await signIn(page, 'morgan', 'dungeon456');
+  await startCampaign(page, 'Morgan’s Keep', '5e');
+  await page.goto('/dm/campaigns');
+  await page.locator('tbody tr', { hasText: 'Running now' }).getByRole('button', { name: 'Share one purse' }).click();
+  await expect(toasts(page)).toContainText('now shares one purse');
+  await page.goto('/dm/party-stash');
+  await page.getByRole('combobox', { name: 'Item' }).fill('Lantern');
+  await page.getByRole('button', { name: 'Add to stash' }).click();
+  await expect(toasts(page)).toContainText('Put 1 × Lantern in the party stash.');
+
+  await signInAsAdmin(page);
+  await page.goto('/admin/users');
+  await userRow(page, 'morgan').getByRole('button', { name: 'Delete morgan' }).click();
+  await expect(toasts(page)).toContainText('morgan still runs Morgan’s Keep');
+  await expect(userRow(page, 'morgan')).toBeVisible();
+});
+
 test('deleting a DM with only empty campaigns removes them, and it is logged', async ({ page }) => {
   await signInAsAdmin(page);
   await addLogin(page, 'morgan', 'dungeon456');

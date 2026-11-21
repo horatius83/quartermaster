@@ -37,7 +37,7 @@
       </thead>
       <tbody>
         <?php foreach ($characters as $c): ?>
-          <?= render('partials/party_row', ['c' => $c]) ?>
+          <?= render('partials/party_row', ['c' => $c, 'shared' => $shared]) ?>
         <?php endforeach; ?>
         <?php if (!$characters): ?><tr><td colspan="5" class="empty">No one has joined yet.</td></tr><?php endif; ?>
       </tbody>

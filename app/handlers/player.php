@@ -201,7 +201,49 @@ function player_pack(): void
         'orders'  => array_map(fn($o) => cart_detail((int)$o['id']), $orders),
         'offers'  => sale_list($mine . "sa.status IN ('countered','pending')", [$char['id']], "CASE sa.status WHEN 'countered' THEN 0 ELSE 1 END, sa.created_at"),
         'sold'    => sale_list($mine . "sa.status IN ('sold','rejected','declined')", [$char['id']], 'sa.decided_at DESC', 8),
+        'shared'  => shares_purse(),
+        'coin'    => spendable_cp($char),
+        'stash'   => shares_purse() ? party_stash_rows() : [],
     ], 'My pack');
+}
+
+/** Put some of a pack stack in the party stash, for anyone in the party to take. Items on offer to sell stay. */
+function pack_to_party(int $rowId): void
+{
+    $char = require_player();
+    if (!shares_purse()) {
+        back_to_pack('Your party doesn’t share a stash.', 'error');
+    }
+    $row = inventory_row($rowId);
+    if (!$row || (int)$row['character_id'] !== (int)$char['id']) {
+        back_to_pack('That item is no longer in your pack.', 'error');
+    }
+    try {
+        $qty = pack_to_stash($row, post_int('quantity', 1), keepOffered: true);
+    } catch (PDOException $e) {
+        throw $e;
+    } catch (RuntimeException $e) {
+        back_to_pack($e->getMessage(), 'error');
+    }
+    back_to_pack("Put {$qty} × {$row['name']} in the party stash.");
+}
+
+/** Take some of a party stash stack into the pack. */
+function pack_take_from_party(int $rowId): void
+{
+    $char = require_player();
+    if (!shares_purse()) {
+        back_to_pack('Your party doesn’t share a stash.', 'error');
+    }
+    $row = party_stash_row($rowId) ?? back_to_pack('Someone has already taken that from the party stash.', 'error');
+    try {
+        $qty = stash_to_pack($row, $char, post_int('quantity', 1));
+    } catch (PDOException $e) {
+        throw $e;
+    } catch (RuntimeException $e) {
+        back_to_pack($e->getMessage(), 'error');
+    }
+    back_to_pack("Took {$qty} × {$row['name']} from the party stash.");
 }
 
 /** Back to the pack with a message; player sale forms are plain (boosted) forms, so the whole page redraws. */
