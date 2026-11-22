@@ -217,6 +217,9 @@ test('the stash’s give form and the player’s stash list show catalog descrip
   await form.getByRole('button', { name: 'Add to stash' }).click();
   await expect(page.locator('#inv-body tr', { hasText: 'Longsword' })).toHaveCount(1);
   await expect(form.getByLabel('Description')).toHaveValue('');
+  // The DM can read it in the stash's list too.
+  await page.locator('#inv-body tr', { hasText: 'Longsword' }).getByText('About the Longsword').click();
+  await expect(page.locator('#inv-body tr', { hasText: 'Longsword' }).getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).')).toBeVisible();
 
   await signIn(page, 'bryn');
   await page.goto('/pack');

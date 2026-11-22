@@ -290,7 +290,7 @@ function inventory_row(int $rowId): ?array
 {
     return q_one(
         'SELECT inv.id, inv.character_id, inv.quantity, inv.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
-                cat.name AS category, cat.slug AS category_slug
+                i.description, cat.name AS category, cat.slug AS category_slug
            FROM inventory inv
            JOIN items i ON i.id = inv.item_id
            JOIN categories cat ON cat.id = i.category_id
@@ -1005,7 +1005,7 @@ function party_stash_row(int $rowId): ?array
 {
     return q_one(
         'SELECT pi.id, pi.campaign_id, pi.quantity, pi.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
-                cat.name AS category, cat.slug AS category_slug
+                i.description, cat.name AS category, cat.slug AS category_slug
            FROM party_items pi
            JOIN items i ON i.id = pi.item_id
            JOIN categories cat ON cat.id = i.category_id

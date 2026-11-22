@@ -18,6 +18,25 @@ test('DM gives an item', async ({ page }) => {
   await expect(form.locator('input[name="item"]')).toHaveValue('');
 });
 
+test('DM reads an item’s description in a pack, and it stays open while the count changes', async ({ page }) => {
+  const row = packRow(page, 'Longsword');
+  const text = row.getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(text).toBeHidden();
+  await row.getByText('About the Longsword').click();
+  await expect(text).toBeVisible();
+  // + draws the row again; the description is still open in the new one.
+  await row.getByRole('button', { name: 'Add one Longsword' }).click();
+  await expect(row.locator('output')).toHaveText('2');
+  await expect(packRow(page, 'Longsword').getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).')).toBeVisible();
+  // Closed, it stays closed through the next redraw.
+  await packRow(page, 'Longsword').getByText('About the Longsword').click();
+  await packRow(page, 'Longsword').getByRole('button', { name: 'Remove one Longsword' }).click();
+  await expect(packRow(page, 'Longsword').locator('output')).toHaveText('1');
+  await expect(packRow(page, 'Longsword').getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).')).toBeHidden();
+  // Items with no description have nothing to open.
+  await expect(packRow(page, 'Silver locket').locator('details.item-desc')).toHaveCount(0);
+});
+
 test('− / + change the count', async ({ page }) => {
   const row = packRow(page, 'Potion of Healing');
   await expect(row.locator('output')).toHaveText('3');

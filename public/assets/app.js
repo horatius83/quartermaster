@@ -433,6 +433,23 @@
     });
   });
 
+  // An item's description in a DM's pack or stash row (views/partials/inventory_row.php) stays open when htmx draws
+  // the row again, as − / + do, so reading it while changing the count doesn't fold it away. Kept by the row's id.
+  var openDescriptions = {};
+  document.addEventListener('toggle', function (evt) {
+    var row = evt.target.matches && evt.target.matches('details.item-desc') && evt.target.closest('tr[id]');
+    if (!row) return;
+    if (evt.target.open) openDescriptions[row.id] = true;
+    else delete openDescriptions[row.id];
+  }, true);
+  htmx.onLoad(function (elt) {
+    if (!elt.querySelectorAll) return;
+    Array.prototype.forEach.call(elt.querySelectorAll('details.item-desc'), function (desc) {
+      var row = desc.closest('tr[id]');
+      if (row && openDescriptions[row.id]) desc.open = true;
+    });
+  });
+
   document.addEventListener('reset', function (evt) {
     // The form's fields go back to their defaults, so nothing in them is filled in any more. Once they have, draw the
     // description box again for the emptied item field.
