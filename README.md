@@ -53,6 +53,8 @@ Players write to the DM from *Requests*: an item no shop stocks, a question, a c
 
 One DM login can run several campaigns, and each DM sees only their own. Each campaign has its own party, stores, carts, party purse and pack history; the item catalog is shared by every campaign of the same system and by every DM, so each can stock the same gear at its own prices (see *Systems and the SRD items*). The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters, stores and party stash are gone.
 
+A store can move to another of the DM's campaigns with *Move store* on its page. If that campaign plays the same system, the store goes as it is, shelves, prices and stock counts included. Its list of who can shop there names this party, so it's cleared, and the store arrives hidden, for the DM to set who shops there and open it. Carts not yet sent are emptied, carts already approved or declined stay in this campaign's history under the store's name, and a store with a cart waiting on the DM can't move until that cart is decided. Those old carts still belong to the store, so deleting it later in its new campaign deletes them too; its *Delete store* confirmation says how many, and from which campaign. If the other campaign plays another system, these items mean nothing there, so it gets an empty, hidden store with the same name, kind and note instead, and this one stays where it is (delete it if it's no longer wanted).
+
 Each player login belongs to one character, so it sees only that character's campaign. Someone playing in two campaigns gets a login for each.
 
 ## Systems and the SRD items
