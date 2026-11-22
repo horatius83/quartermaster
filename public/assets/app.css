@@ -423,7 +423,9 @@ tr.htmx-swapping, li.htmx-swapping, article.htmx-swapping { opacity: 0; transiti
 .item-desc > summary { cursor: pointer; display: inline-flex; align-items: center; min-height: 32px; color: var(--clay); text-decoration: underline; }
 .item-desc[open] > summary { color: var(--ink-soft); }
 .item-desc > p { margin: 4px 0 0; font-size: 16px; white-space: pre-line; overflow-wrap: anywhere; }
-.ledger .item-desc > p { max-width: 60ch; }
+/* In a table, the text wraps in the width the column already has rather than widening it, so opening one doesn't
+   make the columns jump. */
+.ledger .item-desc > p { max-width: 60ch; contain: inline-size; }
 .ware-foot { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--rule); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .price { font-family: var(--display); font-size: 30px; font-weight: 700; color: var(--clay); }
 .price-lg { font-size: 38px; }

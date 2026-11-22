@@ -172,6 +172,14 @@ test('players can read the descriptions of what’s in their pack', async ({ pag
   await expect(text).toBeHidden();
   await row.getByText('About the Longsword').click();
   await expect(text).toBeVisible();
+  // Opening one wraps its text in the column as it is, rather than widening it and moving the others.
+  const potion = page.locator('tbody tr', { hasText: 'Potion of Healing' });
+  const widths = () => potion.locator('xpath=ancestor::table[1]').locator('thead th')
+    .evaluateAll((ths) => ths.map((th) => Math.round(th.getBoundingClientRect().width)));
+  const closed = await widths();
+  await potion.getByText('About the Potion of Healing').click();
+  await expect(potion.getByText(/restores 2d4 \+ 2 hit points/)).toBeVisible();
+  expect(await widths()).toEqual(closed);
   // Items with no description have nothing to open, only the Sell… fold-out.
   await expect(page.locator('tbody tr', { hasText: 'Silver locket' }).locator('details.item-desc')).toHaveCount(0);
 });
