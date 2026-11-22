@@ -184,6 +184,22 @@ test('an item of 1,000 gp or more is stocked at its full price', async ({ page }
   await expect(form.getByLabel('Price')).toHaveValue('1,500 gp');
   await form.getByRole('button', { name: 'Add to shelf' }).click();
   await expect(page.getByLabel('Price of Dragon plate')).toHaveValue('1,500 gp');
+
+  // Saving the shelf line for something else sends its price back as shown, and that reads as itself too.
+  await page.getByLabel('Stock of Dragon plate').fill('3');
+  await page.getByLabel('Stock of Dragon plate').blur();
+  await expect(page.locator('#toasts')).toContainText('Saved Dragon plate: 1,500 gp, 3 in stock.');
+  await page.reload();
+  await expect(page.getByLabel('Price of Dragon plate')).toHaveValue('1,500 gp');
+
+  // As does saving the catalog row.
+  await page.goto('/dm/catalog');
+  const row = page.locator('#catalog-body tr').filter({ has: page.locator('input[name="name"][value="Dragon plate"]') });
+  await row.getByLabel('Weight').fill('65');
+  await row.getByLabel('Weight').blur();
+  await expect(page.locator('#toasts')).toContainText('Saved Dragon plate.');
+  await page.reload();
+  await expect(row.getByLabel('Price')).toHaveValue('1,500 gp');
 });
 
 test('a category filled in for a catalog name goes back when the name becomes a new one', async ({ page }) => {
@@ -211,6 +227,38 @@ test('a category filled in for a catalog name goes back when the name becomes a 
   await expect(category.locator('option:checked')).toHaveText('Treasure');
 });
 
+test('a value of the DM’s that a pick agrees with stays theirs when the name is edited', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  const category = form.locator('select[name="category_id"]');
+  const price = form.getByLabel('Price');
+  const description = form.getByLabel('Description');
+
+  // Chosen first, then a pick with the same category and price, then the name edited into a new item's.
+  await category.selectOption({ label: 'Treasure' });
+  await price.fill('25 gp');
+  await input.pressSequentially('silver');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Silver locket/ }).click();
+  await expect(description).toHaveAttribute('placeholder', 'The catalog has no description of Silver locket.');
+  await input.press('End');
+  await input.pressSequentially(' (tarnished)');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(category.locator('option:checked')).toHaveText('Treasure');
+  await expect(price).toHaveValue('25 gp');
+
+  // What the pick changed is still its own, and goes back.
+  await input.fill('');
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ }).click();
+  await expect(price).toHaveValue('15 gp');
+  await expect(category.locator('option:checked')).toHaveText('Weapon');
+  await input.press('End');
+  await input.pressSequentially(' of Dawn');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(price).toHaveValue('');
+});
+
 test('a pick made while the typing’s request is still waiting is the only one sent, and fills the price', async ({ page }) => {
   // Hold the search for "longs", so the list doesn't redraw under the click.
   await page.route(/\/dm\/catalog\/suggest\?item=longs$/, () => {});
@@ -218,9 +266,13 @@ test('a pick made while the typing’s request is still waiting is the only one 
   const form = page.locator('#stock-form');
   const input = form.getByRole('combobox', { name: 'Stock an item' });
   await form.getByLabel('Price').fill('9 gp');
+  // Let the typing's own request for "long" go out and come back first, so it isn't counted below.
+  const longReply = page.waitForResponse((res) => new URL(res.url()).pathname.endsWith('/dm/catalog/details')
+    && new URL(res.url()).searchParams.get('item') === 'long');
   await input.pressSequentially('long');
   const option = form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ });
   await expect(option).toBeVisible();
+  await longReply;
   const sent: string[] = [];
   page.on('request', (req) => { if (req.url().includes('/dm/catalog/details')) sent.push(new URL(req.url()).searchParams.get('item') ?? ''); });
   // Inside the 300 ms the typing waits: the pick cancels that request rather than racing it.

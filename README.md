@@ -111,6 +111,8 @@ Older databases are brought up to date automatically on the first request after 
 
 If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006, 007, 009 and 011 only once each: unlike 001, 005, 008 and 010, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
+Before this version, saving a shelf line or catalog row priced at 1,000 gp or more could store it with its thousands dropped ("1,500 gp" saved as 500 gp), because the price field shows commas and they weren't read. Prices are read correctly now, but ones saved wrong before stay wrong. `php scripts/check-grouped-prices.php` lists shelf lines and SRD catalog items whose price is exactly what that would have left, and changes nothing; fix any it finds on the *Stores* or *Catalog* page.
+
 ## Deploying to Hostinger
 
 1. **Create the database.** In hPanel go to *Databases → MySQL Databases* and create a database and user. Note the database name, username and password (Hostinger prefixes them with something like `u123456789_`).
@@ -164,7 +166,7 @@ app/handlers/      one file per area: auth, campaigns, party, inventory, stores,
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 app/data/          the SRD gear and magic items each system can load, and the spells suggested for each system's scrolls; their licence notices are in public/assets/srd-notices.txt
-scripts/           seed-demo.php, dev-router.php
+scripts/           seed-demo.php, dev-router.php, check-grouped-prices.php (finds prices saved without their thousands)
 tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
 tests/mysql/       checks of item tags, rulesets, sales, requests and the SRD data against real MySQL and MariaDB (npm run test:mysql)
 ```

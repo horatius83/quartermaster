@@ -161,11 +161,16 @@
     // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
     var category = suggestCategory(p);
     var id = opt.dataset.categoryId;
-    if (category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
+    var details = itemDetailsFor(p.input);
+    if (category && id && category.value !== id && category.querySelector('option[value="' + id + '"]')) {
+      category.value = id;
+      // Filled in by the pick, not chosen by the DM, so the description box (below) treats it as such.
+      if (details) category.dataset.autofilled = id;
+    }
     // A pick fills Price, Weight and Category from the catalog, over whatever they hold (see the description box,
-    // below). Category is set first so the box's reply finds it as picked and marks it filled in. The pick also
-    // cancels a request the typing had waiting (htmx keeps one delay per element), so nothing replaces this one.
-    if (itemDetailsFor(p.input)) htmx.trigger(p.input, 'qm-item-changed', { pick: true });
+    // below), except where the DM's own value already matches, which stays theirs. The pick also cancels a request
+    // the typing had waiting (htmx keeps one delay per element), so nothing replaces this one.
+    if (details) htmx.trigger(p.input, 'qm-item-changed', { pick: true });
     dismissSuggestions(p);
   }
   function requestBrowse(p, kind, offset) {
@@ -357,8 +362,8 @@
   // The give and stock forms' description box (views/partials/item_details.php): what the catalog says about the item
   // in the field it takes in (hx-include), drawn again as the name changes. For a catalog item, its price, weight and
   // category go into the form's Price (Value on the give form), Weight and Category. Picking it fills them whatever
-  // they hold; typing its name only fills a field the DM hasn't changed (one still at its default or holding what was
-  // filled in before).
+  // they hold (a value of the DM's that it matches stays theirs); typing its name only fills a field the DM hasn't
+  // changed (one still at its default or holding what was filled in before).
   // Either way a field the DM changes while the reply is on its way is theirs, and a reply for a name the field no
   // longer holds is dropped. When the name stops being a catalog item, a field still holding what was filled in goes
   // back to its default, so a new item isn't added to the catalog with another item's price or category.
@@ -421,6 +426,8 @@
       if (mine && !xhr.qmPick) return;
       var value = info.dataset[DETAIL_FIELDS[field.name]];
       if (value === undefined || (field.tagName === 'SELECT' && !field.querySelector('option[value="' + value + '"]'))) return;
+      // The DM's own value that the pick agrees with stays theirs, so editing the name later doesn't take it out.
+      if (mine && field.value === value) return;
       field.value = value;
       field.dataset.autofilled = value;
     });
