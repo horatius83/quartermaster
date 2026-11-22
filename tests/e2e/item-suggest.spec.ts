@@ -205,6 +205,37 @@ test('a slow catalog reply doesn’t overwrite a price typed while it was on its
   await expect(form.getByLabel('Weight')).toHaveValue('1');
 });
 
+test('giving an item shows its description and fills in its value and weight too', async ({ page }) => {
+  await page.goto(`/dm/inventory/${BRYN}`);
+  const form = giveForm(page);
+  const description = form.getByLabel('Description');
+  const category = form.locator('select[name="category_id"]');
+  await expect(description).toHaveAttribute('readonly', '');
+  await expect(description).toHaveAttribute('placeholder', 'Pick an item to read its description.');
+
+  await itemInput(page).pressSequentially('potion of');
+  await suggestions(page).getByRole('option', { name: /Potion of Healing/ }).click();
+  await expect(description).toHaveValue(/restores 2d4 \+ 2 hit points/);
+  await expect(form.getByLabel('Value')).toHaveValue('50 gp');
+  await expect(form.getByLabel('Weight')).toHaveValue('0.5');
+  await expect(category.locator('option:checked')).toHaveText('Consumable');
+
+  // A new name is added to the catalog when it's given, so the box says so in the give form's words.
+  await itemInput(page).fill('Potion of Gumption');
+  await expect(description).toHaveAttribute('placeholder', 'Not in the catalog yet. Giving it adds it, with this category, weight and value.');
+  await expect(form.getByLabel('Value')).toHaveValue('');
+  await expect(form.getByLabel('Weight')).toHaveValue('0');
+
+  await itemInput(page).fill('torch');
+  await expect(description).toHaveValue(/Burns for 1 hour/);
+  await form.getByRole('button', { name: 'Add to pack' }).click();
+  await expect(page.locator('#inv-body tr', { hasText: 'Torch' })).not.toHaveCount(0);
+  // The form empties for the next item, description too.
+  await expect(itemInput(page)).toHaveValue('');
+  await expect(description).toHaveValue('');
+  await expect(description).toHaveAttribute('placeholder', 'Pick an item to read its description.');
+});
+
 test('an item with no description says so', async ({ page }) => {
   await page.goto('/dm/stores');
   const form = page.locator('#stock-form');

@@ -310,7 +310,7 @@ label.field, div.field { display: flex; flex-direction: column; gap: 2px; font-s
   padding: 4px 10px;
 }
 .field textarea { resize: vertical; padding: 6px 10px; }
-/* The stock form's description box (views/partials/item_details.php): read-only, so it looks like a note rather than a field to fill. */
+/* The give and stock forms' description box (views/partials/item_details.php): read-only, so it looks like a note rather than a field to fill. */
 .item-details textarea[readonly] { background: var(--paper); border-style: dashed; }
 .input-sm { min-height: 38px; width: 90px; font: inherit; color: var(--ink); background: var(--field); border: 1.5px solid var(--ink-soft); border-radius: 6px; padding: 2px 8px; }
 .form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }

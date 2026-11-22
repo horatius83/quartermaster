@@ -352,10 +352,11 @@
     var p = suggestParts(evt.target.form.querySelector('.suggest'));
     if (p && p.toggle && p.list.dataset.mode === 'browse') browseSuggestions(p);
   });
-  // The stock form's description box (views/partials/item_details.php): what the catalog says about the item in the
-  // field it takes in (hx-include), drawn again as the name changes. For a catalog item, its price and weight go into
-  // the form's Price and Weight, and its category into Category. Picking it fills them whatever they hold; typing its
-  // name only fills a field the DM hasn't changed (one still at its default or holding what was filled in before).
+  // The give and stock forms' description box (views/partials/item_details.php): what the catalog says about the item
+  // in the field it takes in (hx-include), drawn again as the name changes. For a catalog item, its price and weight go
+  // into the form's Price (Value on the give form) and Weight, and its category into Category. Picking it fills them
+  // whatever they hold; typing its name only fills a field the DM hasn't changed (one still at its default or holding
+  // what was filled in before).
   // Either way a field the DM changes while the reply is on its way is theirs, and a reply for a name the field no
   // longer holds is dropped. When the name stops being a catalog item, a field still holding what was filled in goes
   // back to its default.

@@ -296,8 +296,8 @@ function dm_catalog_suggest(): void
 }
 
 /**
- * The catalog's details of the item named in ?item=…, for the stock form (views/partials/item_details.php): its
- * description to read, and its price, weight and category, which app.js copies into the form's fields.
+ * The catalog's details of the item named in ?item=…, for the give and stock forms (views/partials/item_details.php):
+ * its description to read, and its price, weight and category, which app.js copies into the form's fields.
  */
 function dm_catalog_details(): void
 {

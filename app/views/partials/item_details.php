@@ -1,10 +1,11 @@
 <?php
 /**
- * What the catalog says about the item typed or picked on the stock form, read-only: its description, plus its price,
- * weight and category as data-* attributes, which app.js copies into the form's fields. Drawn inside the form's
- * details box (see views/dm/stores.php), which fetches it again from /dm/catalog/details whenever the item changes.
+ * What the catalog says about the item typed or picked on the give or stock form, read-only: its description, plus its
+ * price, weight and category as data-* attributes, which app.js copies into the form's fields. Drawn inside the form's
+ * details box (see views/dm/inventory.php and views/dm/stores.php), which fetches it again from /dm/catalog/details
+ * whenever the item changes.
  *
- * @var string     $id   prefix of the item field's ids, as in partials/item_suggest
+ * @var string     $id   prefix of the item field's ids, as in partials/item_suggest: give-item or stock-item
  * @var array|null $item the catalog item, or null if the name isn't in the catalog (or nothing is typed)
  * @var string     $name what was typed
  */
@@ -15,7 +16,9 @@ if ($item) {
         . ' data-weight="' . e(rtrim(rtrim(number_format(round((float)$item['weight'], 2), 2, '.', ''), '0'), '.')) . '"'
         . ' data-category-id="' . (int)$item['category_id'] . '"';
 } else {
-    $placeholder = $name === '' ? 'Pick an item to read its description.' : 'Not in the catalog yet. Stocking it adds it, with this category, weight and price.';
+    $placeholder = $name === '' ? 'Pick an item to read its description.' : ($id === 'give-item'
+        ? 'Not in the catalog yet. Giving it adds it, with this category, weight and value.'
+        : 'Not in the catalog yet. Stocking it adds it, with this category, weight and price.');
     $data = ' data-found="0"';
 }
 ?>
