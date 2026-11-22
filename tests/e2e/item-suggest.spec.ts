@@ -169,6 +169,69 @@ test('picking an item to stock fills in its price and weight and shows its descr
   await expect(price).toHaveValue('15 gp');
 });
 
+test('an item of 1,000 gp or more is stocked at its full price', async ({ page }) => {
+  await page.goto('/dm/catalog');
+  const catalogForm = page.locator('#catalog-form');
+  await catalogForm.getByLabel('New item').fill('Dragon plate');
+  await catalogForm.getByLabel('Price').fill('1,500 gp');
+  await catalogForm.getByRole('button', { name: 'Add item' }).click();
+  await expect(page.locator('#toasts')).toContainText('Added Dragon plate to the catalog.');
+
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  await form.getByRole('combobox', { name: 'Stock an item' }).pressSequentially('dragon p');
+  await form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Dragon plate/ }).click();
+  await expect(form.getByLabel('Price')).toHaveValue('1,500 gp');
+  await form.getByRole('button', { name: 'Add to shelf' }).click();
+  await expect(page.getByLabel('Price of Dragon plate')).toHaveValue('1,500 gp');
+});
+
+test('a category filled in for a catalog name goes back when the name becomes a new one', async ({ page }) => {
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  const category = form.locator('select[name="category_id"]');
+  const description = form.getByLabel('Description');
+  const start = await category.locator('option:checked').textContent();
+
+  await input.fill('Torch');
+  await expect(description).toHaveValue(/Burns for 1 hour/);
+  await expect(category.locator('option:checked')).toHaveText('Adventuring Gear');
+  await input.fill('Torch of Everburning');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(category.locator('option:checked')).toHaveText(start ?? '');
+
+  // A category the DM chose is theirs: typing a catalog name on the way to a new one leaves it be.
+  await category.selectOption({ label: 'Treasure' });
+  await input.fill('Torch');
+  await expect(description).toHaveValue(/Burns for 1 hour/);
+  await expect(category.locator('option:checked')).toHaveText('Treasure');
+  await input.fill('Torch of Everburning');
+  await expect(description).toHaveAttribute('placeholder', /Not in the catalog yet/);
+  await expect(category.locator('option:checked')).toHaveText('Treasure');
+});
+
+test('a pick made while the typing’s request is still waiting is the only one sent, and fills the price', async ({ page }) => {
+  // Hold the search for "longs", so the list doesn't redraw under the click.
+  await page.route(/\/dm\/catalog\/suggest\?item=longs$/, () => {});
+  await page.goto('/dm/stores');
+  const form = page.locator('#stock-form');
+  const input = form.getByRole('combobox', { name: 'Stock an item' });
+  await form.getByLabel('Price').fill('9 gp');
+  await input.pressSequentially('long');
+  const option = form.getByRole('listbox', { name: 'Catalog items' }).getByRole('option', { name: /Longsword/ });
+  await expect(option).toBeVisible();
+  const sent: string[] = [];
+  page.on('request', (req) => { if (req.url().includes('/dm/catalog/details')) sent.push(new URL(req.url()).searchParams.get('item') ?? ''); });
+  // Inside the 300 ms the typing waits: the pick cancels that request rather than racing it.
+  await input.press('s');
+  await option.click();
+  await expect(form.getByLabel('Description')).toHaveValue('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(form.getByLabel('Price')).toHaveValue('15 gp');
+  await page.waitForTimeout(500);
+  expect(sent).toEqual(['Longsword']);
+});
+
 test('stocking straight after retyping the item doesn’t use the old item’s price', async ({ page }) => {
   await page.goto('/dm/stores');
   const form = page.locator('#stock-form');
@@ -220,9 +283,9 @@ test('giving an item shows its description and fills in its value and weight too
   await expect(form.getByLabel('Weight')).toHaveValue('0.5');
   await expect(category.locator('option:checked')).toHaveText('Consumable');
 
-  // A new name is added to the catalog when it's given, so the box says so in the give form's words.
+  // A new name is added to the catalog along with it, so the box says so in the give form's words.
   await itemInput(page).fill('Potion of Gumption');
-  await expect(description).toHaveAttribute('placeholder', 'Not in the catalog yet. Giving it adds it, with this category, weight and value.');
+  await expect(description).toHaveAttribute('placeholder', 'Not in the catalog yet. Adding it puts it in the catalog too, with this category, weight and value.');
   await expect(form.getByLabel('Value')).toHaveValue('');
   await expect(form.getByLabel('Weight')).toHaveValue('0');
 

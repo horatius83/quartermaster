@@ -17,7 +17,8 @@ if ($item) {
         . ' data-category-id="' . (int)$item['category_id'] . '"';
 } else {
     $placeholder = $name === '' ? 'Pick an item to read its description.' : ($id === 'give-item'
-        ? 'Not in the catalog yet. Giving it adds it, with this category, weight and value.'
+        // The give form adds to a pack or to the party stash (partials/give_form.php), so this says neither.
+        ? 'Not in the catalog yet. Adding it puts it in the catalog too, with this category, weight and value.'
         : 'Not in the catalog yet. Stocking it adds it, with this category, weight and price.');
     $data = ' data-found="0"';
 }

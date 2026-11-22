@@ -158,12 +158,14 @@
     }
     p.input.value = opt.dataset.value;
     refreshDependents(p.input);
-    // A pick fills Price and Weight from the catalog, over whatever they hold (see the description box, below).
-    if (itemDetailsFor(p.input)) htmx.trigger(p.input, 'qm-item-changed', { pick: true });
     // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
     var category = suggestCategory(p);
     var id = opt.dataset.categoryId;
     if (category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
+    // A pick fills Price, Weight and Category from the catalog, over whatever they hold (see the description box,
+    // below). Category is set first so the box's reply finds it as picked and marks it filled in. The pick also
+    // cancels a request the typing had waiting (htmx keeps one delay per element), so nothing replaces this one.
+    if (itemDetailsFor(p.input)) htmx.trigger(p.input, 'qm-item-changed', { pick: true });
     dismissSuggestions(p);
   }
   function requestBrowse(p, kind, offset) {
@@ -353,14 +355,14 @@
     if (p && p.toggle && p.list.dataset.mode === 'browse') browseSuggestions(p);
   });
   // The give and stock forms' description box (views/partials/item_details.php): what the catalog says about the item
-  // in the field it takes in (hx-include), drawn again as the name changes. For a catalog item, its price and weight go
-  // into the form's Price (Value on the give form) and Weight, and its category into Category. Picking it fills them
-  // whatever they hold; typing its name only fills a field the DM hasn't changed (one still at its default or holding
-  // what was filled in before).
+  // in the field it takes in (hx-include), drawn again as the name changes. For a catalog item, its price, weight and
+  // category go into the form's Price (Value on the give form), Weight and Category. Picking it fills them whatever
+  // they hold; typing its name only fills a field the DM hasn't changed (one still at its default or holding what was
+  // filled in before).
   // Either way a field the DM changes while the reply is on its way is theirs, and a reply for a name the field no
   // longer holds is dropped. When the name stops being a catalog item, a field still holding what was filled in goes
-  // back to its default.
-  var DETAIL_FIELDS = ['price', 'weight'];
+  // back to its default, so a new item isn't added to the catalog with another item's price or category.
+  var DETAIL_FIELDS = { price: 'price', weight: 'weight', category_id: 'categoryId' };
   function itemDetailsFor(input) {
     var form = input.id && input.form;
     return form ? form.querySelector('.item-details[hx-include="#' + input.id + '"]') : null;
@@ -369,12 +371,20 @@
     return !!(el && el.classList && el.classList.contains('item-details'));
   }
   function detailFields(form) {
-    return DETAIL_FIELDS.map(function (name) { return form.querySelector('input[name="' + name + '"]'); });
+    return Object.keys(DETAIL_FIELDS).map(function (name) {
+      return form.querySelector('input[name="' + name + '"], select[name="' + name + '"]');
+    }).filter(Boolean);
+  }
+  // What the field holds when the form is reset: for a select, the option marked selected in the page, or the first.
+  function fieldDefault(field) {
+    if (field.tagName !== 'SELECT') return field.defaultValue;
+    var chosen = Array.prototype.filter.call(field.options, function (o) { return o.defaultSelected; })[0] || field.options[0];
+    return chosen ? chosen.value : '';
   }
   function forgetFilledIn(form) {
     detailFields(form).forEach(function (field) {
-      if (!field || field.dataset.autofilled === undefined) return;
-      if (field.value === field.dataset.autofilled) field.value = field.defaultValue;
+      if (field.dataset.autofilled === undefined) return;
+      if (field.value === field.dataset.autofilled) field.value = fieldDefault(field);
       delete field.dataset.autofilled;
     });
   }
@@ -389,7 +399,7 @@
     var xhr = evt.detail.xhr;
     xhr.qmItem = detailsName(box);
     xhr.qmPick = !!(trigger && trigger.detail && trigger.detail.pick);
-    xhr.qmFields = detailFields(box.closest('form')).map(function (field) { return field ? field.value : null; });
+    xhr.qmFields = detailFields(box.closest('form')).map(function (field) { return field.value; });
   });
   document.addEventListener('htmx:beforeSwap', function (evt) {
     if (isItemDetails(evt.detail.target) && evt.detail.xhr.qmItem !== detailsName(evt.detail.target)) evt.detail.shouldSwap = false;
@@ -406,16 +416,14 @@
       return;
     }
     detailFields(form).forEach(function (field, i) {
-      if (!field || field.value !== xhr.qmFields[i]) return;
-      var mine = field.value !== field.defaultValue && field.value !== field.dataset.autofilled;
+      if (field.value !== xhr.qmFields[i]) return;
+      var mine = field.value !== fieldDefault(field) && field.value !== field.dataset.autofilled;
       if (mine && !xhr.qmPick) return;
-      var value = info.dataset[field.name];
+      var value = info.dataset[DETAIL_FIELDS[field.name]];
+      if (value === undefined || (field.tagName === 'SELECT' && !field.querySelector('option[value="' + value + '"]'))) return;
       field.value = value;
       field.dataset.autofilled = value;
     });
-    var category = form.querySelector('select[name="category_id"]');
-    var id = info.dataset.categoryId;
-    if (category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
   });
 
   document.addEventListener('reset', function (evt) {
