@@ -204,3 +204,28 @@ test('the DM moves a stack into the stash, edits the purse, and stopping splits 
   await page.goto('/pack');
   await expect(page.locator('#party-stash')).toHaveCount(0);
 });
+
+test('the stash’s give form and the player’s stash list show catalog descriptions', async ({ page }) => {
+  await setSharing(page, true);
+  await page.goto('/dm/party-stash');
+  const form = page.locator('#give-form');
+  const input = form.getByRole('combobox', { name: 'Item' });
+  await input.pressSequentially('longs');
+  await form.getByRole('listbox').getByRole('option', { name: /Longsword/ }).click();
+  await expect(form.getByLabel('Description')).toHaveValue('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(form.getByLabel('Value')).toHaveValue('15 gp');
+  await form.getByRole('button', { name: 'Add to stash' }).click();
+  await expect(page.locator('#inv-body tr', { hasText: 'Longsword' })).toHaveCount(1);
+  await expect(form.getByLabel('Description')).toHaveValue('');
+  // The DM can read it in the stash's list too.
+  await page.locator('#inv-body tr', { hasText: 'Longsword' }).getByText('About the Longsword').click();
+  await expect(page.locator('#inv-body tr', { hasText: 'Longsword' }).getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).')).toBeVisible();
+
+  await signIn(page, 'bryn');
+  await page.goto('/pack');
+  const row = stashRow(page, 'Longsword');
+  const text = row.getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(text).toBeHidden();
+  await row.getByText('About the Longsword').click();
+  await expect(text).toBeVisible();
+});

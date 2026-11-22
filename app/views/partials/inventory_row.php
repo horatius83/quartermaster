@@ -8,10 +8,17 @@ $stash = !empty($stash);
 $base = url(($stash ? '/dm/stash/' : '/dm/inv/') . $r['id']);
 $toStash = !$stash && $shared;
 ?>
-<tr>
+<?php // The id lets assets/app.js keep the description open when the row is drawn again (− / +, a failed move). ?>
+<tr id="<?= $stash ? 'stash-row-' : 'inv-row-' ?><?= (int)$r['id'] ?>">
   <td>
     <div class="item-name"><?= e($r['name']) ?></div>
     <?php if ($r['notes'] !== ''): ?><div class="muted small"><?= e($r['notes']) ?></div><?php endif; ?>
+    <?php if (($r['description'] ?? '') !== ''): ?>
+      <details class="item-desc">
+        <summary>About the <?= e($r['name']) ?></summary>
+        <p><?= e($r['description']) ?></p>
+      </details>
+    <?php endif; ?>
   </td>
   <td><?= category_tag($r['category'], $r['category_slug']) ?></td>
   <td>

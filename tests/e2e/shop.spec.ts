@@ -150,3 +150,36 @@ test('new notes on a shelf line wait for carts sent to the DM, and take it out o
   await expect(page.locator('#cart .cart-line')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Add Spell scroll (1st level) (Haste) to cart' })).toBeVisible();
 });
+
+test('players can read a ware’s description from the catalog', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'Mossbottom Apothecary' }).click();
+  const potion = page.locator('.ware', { hasText: 'Potion of Healing' });
+  const about = potion.getByText('About the Potion of Healing');
+  const text = potion.getByText(/restores 2d4 \+ 2 hit points/);
+  await expect(text).toBeHidden();
+  await about.click();
+  await expect(text).toBeVisible();
+  // Wares with no description have nothing to open.
+  await expect(page.locator('.ware', { hasText: 'Antitoxin' }).locator('details')).toHaveCount(0);
+});
+
+test('players can read the descriptions of what’s in their pack', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.goto('/pack');
+  const row = page.locator('tbody tr', { hasText: 'Longsword' });
+  const text = row.getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(text).toBeHidden();
+  await row.getByText('About the Longsword').click();
+  await expect(text).toBeVisible();
+  // Opening one wraps its text in the column as it is, rather than widening it and moving the others.
+  const potion = page.locator('tbody tr', { hasText: 'Potion of Healing' });
+  const widths = () => potion.locator('xpath=ancestor::table[1]').locator('thead th')
+    .evaluateAll((ths) => ths.map((th) => Math.round(th.getBoundingClientRect().width)));
+  const closed = await widths();
+  await potion.getByText('About the Potion of Healing').click();
+  await expect(potion.getByText(/restores 2d4 \+ 2 hit points/)).toBeVisible();
+  expect(await widths()).toEqual(closed);
+  // Items with no description have nothing to open, only the Sell… fold-out.
+  await expect(page.locator('tbody tr', { hasText: 'Silver locket' }).locator('details.item-desc')).toHaveCount(0);
+});

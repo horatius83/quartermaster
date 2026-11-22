@@ -295,3 +295,19 @@ function dm_catalog_suggest(): void
     }
     exit;
 }
+
+/**
+ * The catalog's details of the item named in ?item=…, for the give and stock forms (views/partials/item_details.php):
+ * its description to read, and its price, weight and category, which app.js copies into the form's fields.
+ */
+function dm_catalog_details(): void
+{
+    require_dm();
+    $name = get_str('item', 150);
+    fragment('partials/item_details', [
+        // The id prefix of the form's item field, so the description box keeps its ids (and its label) when redrawn.
+        'id'   => preg_replace('/[^a-z0-9-]/', '', get_str('for', 40)) ?: 'item',
+        'item' => $name === '' ? null : item_by_name($name, campaign_ruleset()),
+        'name' => $name,
+    ]);
+}

@@ -23,6 +23,8 @@ All four steps happen in one transaction.
 
 A shelf line can have notes (up to 191 characters), such as which spell a level 1 spell scroll holds. The same item can be stocked more than once with different notes, and players see the notes on the shelf, in their cart and in their pack. Notes match exactly, so "Shield" and "shield" are two lines. Curly quotes are saved straight, though, so "Hunter’s Mark" typed on a phone is the same line as "Hunter's Mark". New notes make a line a different thing, so changing them takes the line out of open carts, like pulling it from the shelf, and waits until any cart sent to the DM that holds it is approved or declined. For a spell scroll (an item named like "Spell scroll (3rd level)", "Scroll, 3rd-level spell" or "Level 3 scroll"), typing in the stock form's *Notes* suggests the SRD spells a scroll of its level can hold. In 5e that's the level's spells first, then lower ones cast at it (cantrip scrolls get cantrips). In 3.5e a spell's level depends on who casts it, so it's the spells that are that level on any class or domain list, each with the lists that have it there (*Brd, Clr, Drd, Pal, Healing domain*). Pathfinder campaigns have no spell list yet, so their notes get no suggestions, and nor do notes edited on the shelf.
 
+Picking an item in the stock form shows its catalog description, read-only, and fills in Price, Weight and Category from the catalog. Change any of them before *Add to shelf* to stock it at another price. Typing an item's catalog name in full does the same, except that it leaves alone a field you've changed yourself. Typing in the item field again takes out what was filled in straight away (Category included), so a quick *Add to shelf* never stocks one item at another's price, nor adds a new item to the catalog under another item's category, and a name the catalog doesn't have yet clears the description. The *Give an item* form on a character's pack (and *Add to the stash* on the *Party stash* page) shows the description and fills in Value, Weight and Category the same way, though as its note says, those only count for an item new to the catalog. Players see each ware's description on its card in the shop, and each item's in their pack and the party stash, under *About the …*. So does the DM, under *Player inventories* and on the *Party stash* page, where an open description stays open as − / + change the count.
+
 ## Selling from a pack
 
 Players sell from *My pack*: *Sell…* on a row asks how many and an asking price for the lot (the catalog's price for one is shown as a guide), with an optional note. The offer goes to the DM under *Sale offers*, with a badge in the sidebar, and nothing leaves the pack until it's sold. Items already on offer can't be offered again, and a player can withdraw an offer until the DM answers it. The DM can:
@@ -109,6 +111,8 @@ Older databases are brought up to date automatically on the first request after 
 
 If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006, 007, 009 and 011 only once each: unlike 001, 005, 008 and 010, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
+Before this version, saving a shelf line or catalog row priced at 1,000 gp or more could store it with its thousands dropped ("1,500 gp" saved as 500 gp), because the price field shows commas and they weren't read. Prices are read correctly now, but ones saved wrong before stay wrong. `php scripts/check-grouped-prices.php` lists shelf lines and SRD catalog items whose price is exactly what that would have left, and changes nothing; fix any it finds on the *Stores* or *Catalog* page.
+
 ## Deploying to Hostinger
 
 1. **Create the database.** In hPanel go to *Databases → MySQL Databases* and create a database and user. Note the database name, username and password (Hostinger prefixes them with something like `u123456789_`).
@@ -162,7 +166,7 @@ app/handlers/      one file per area: auth, campaigns, party, inventory, stores,
 app/views/         PHP templates; views/partials/ are the fragments htmx swaps in
 app/sql/           schema.mysql.sql (production), schema.sqlite.sql (local dev), upgrade-*.sql for existing databases
 app/data/          the SRD gear and magic items each system can load, and the spells suggested for each system's scrolls; their licence notices are in public/assets/srd-notices.txt
-scripts/           seed-demo.php, dev-router.php
+scripts/           seed-demo.php, dev-router.php, check-grouped-prices.php (finds prices saved without their thousands)
 tests/e2e/         Playwright tests, their config.php and reset.php; playwright.config.ts sits at the root
 tests/mysql/       checks of item tags, rulesets, sales, requests and the SRD data against real MySQL and MariaDB (npm run test:mysql)
 ```

@@ -82,6 +82,7 @@ $routes = [
     ['GET',  '/dm/catalog',                'dm_catalog'],
     ['POST', '/dm/catalog',                'dm_catalog_create'],
     ['GET',  '/dm/catalog/suggest',        'dm_catalog_suggest'],
+    ['GET',  '/dm/catalog/details',        'dm_catalog_details'],
     ['POST', '/dm/catalog/{id}',           'dm_catalog_update'],
     ['POST', '/dm/catalog/{id}/delete',    'dm_catalog_delete'],
 

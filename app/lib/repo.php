@@ -271,6 +271,7 @@ function character(int $id): ?array
 function inventory_rows(int $characterId, string $categorySlug = ''): array
 {
     $sql = 'SELECT inv.id, inv.quantity, inv.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
+                   i.description,
                    cat.name AS category, cat.slug AS category_slug
               FROM inventory inv
               JOIN items i ON i.id = inv.item_id
@@ -289,7 +290,7 @@ function inventory_row(int $rowId): ?array
 {
     return q_one(
         'SELECT inv.id, inv.character_id, inv.quantity, inv.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
-                cat.name AS category, cat.slug AS category_slug
+                i.description, cat.name AS category, cat.slug AS category_slug
            FROM inventory inv
            JOIN items i ON i.id = inv.item_id
            JOIN categories cat ON cat.id = i.category_id
@@ -489,7 +490,7 @@ function store(int $id): ?array
 
 function store_stock_rows(int $storeId): array
 {
-    $sql = 'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
+    $sql = 'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight, i.description,
                    cat.name AS category, cat.slug AS category_slug
               FROM store_stock st
               JOIN items i ON i.id = st.item_id
@@ -988,7 +989,7 @@ function party_purse(): array
 function party_stash_rows(): array
 {
     return q_all(
-        'SELECT pi.id, pi.quantity, pi.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
+        'SELECT pi.id, pi.quantity, pi.notes, i.id AS item_id, i.name, i.weight, i.price_cp, i.description,
                 cat.name AS category, cat.slug AS category_slug
            FROM party_items pi
            JOIN items i ON i.id = pi.item_id
@@ -1004,7 +1005,7 @@ function party_stash_row(int $rowId): ?array
 {
     return q_one(
         'SELECT pi.id, pi.campaign_id, pi.quantity, pi.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
-                cat.name AS category, cat.slug AS category_slug
+                i.description, cat.name AS category, cat.slug AS category_slug
            FROM party_items pi
            JOIN items i ON i.id = pi.item_id
            JOIN categories cat ON cat.id = i.category_id

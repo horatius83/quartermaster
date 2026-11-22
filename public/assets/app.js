@@ -161,7 +161,16 @@
     // A catalog item keeps its own category, so show that one rather than leave a different one chosen.
     var category = suggestCategory(p);
     var id = opt.dataset.categoryId;
-    if (category && id && category.querySelector('option[value="' + id + '"]')) category.value = id;
+    var details = itemDetailsFor(p.input);
+    if (category && id && category.value !== id && category.querySelector('option[value="' + id + '"]')) {
+      category.value = id;
+      // Filled in by the pick, not chosen by the DM, so the description box (below) treats it as such.
+      if (details) category.dataset.autofilled = id;
+    }
+    // A pick fills Price, Weight and Category from the catalog, over whatever they hold (see the description box,
+    // below), except where the DM's own value already matches, which stays theirs. The pick also cancels a request
+    // the typing had waiting (htmx keeps one delay per element), so nothing replaces this one.
+    if (details) htmx.trigger(p.input, 'qm-item-changed', { pick: true });
     dismissSuggestions(p);
   }
   function requestBrowse(p, kind, offset) {
@@ -229,6 +238,9 @@
 
   document.addEventListener('input', function (evt) {
     refreshDependents(evt.target);
+    // What was filled in was for the old name. Take it out now rather than when the description box catches up, so
+    // Enter or Add to shelf straight after typing can't stock the new name at the old one's price.
+    if (itemDetailsFor(evt.target)) forgetFilledIn(evt.target.form);
     var p = suggestParts(evt.target);
     if (!p || evt.target !== p.input) return;
     // Typing always searches the whole catalog, even with a category being browsed.
@@ -347,7 +359,105 @@
     var p = suggestParts(evt.target.form.querySelector('.suggest'));
     if (p && p.toggle && p.list.dataset.mode === 'browse') browseSuggestions(p);
   });
+  // The give and stock forms' description box (views/partials/item_details.php): what the catalog says about the item
+  // in the field it takes in (hx-include), drawn again as the name changes. For a catalog item, its price, weight and
+  // category go into the form's Price (Value on the give form), Weight and Category. Picking it fills them whatever
+  // they hold (a value of the DM's that it matches stays theirs); typing its name only fills a field the DM hasn't
+  // changed (one still at its default or holding what was filled in before).
+  // Either way a field the DM changes while the reply is on its way is theirs, and a reply for a name the field no
+  // longer holds is dropped. When the name stops being a catalog item, a field still holding what was filled in goes
+  // back to its default, so a new item isn't added to the catalog with another item's price or category.
+  var DETAIL_FIELDS = { price: 'price', weight: 'weight', category_id: 'categoryId' };
+  function itemDetailsFor(input) {
+    var form = input.id && input.form;
+    return form ? form.querySelector('.item-details[hx-include="#' + input.id + '"]') : null;
+  }
+  function isItemDetails(el) {
+    return !!(el && el.classList && el.classList.contains('item-details'));
+  }
+  function detailFields(form) {
+    return Object.keys(DETAIL_FIELDS).map(function (name) {
+      return form.querySelector('input[name="' + name + '"], select[name="' + name + '"]');
+    }).filter(Boolean);
+  }
+  // What the field holds when the form is reset: for a select, the option marked selected in the page, or the first.
+  function fieldDefault(field) {
+    if (field.tagName !== 'SELECT') return field.defaultValue;
+    var chosen = Array.prototype.filter.call(field.options, function (o) { return o.defaultSelected; })[0] || field.options[0];
+    return chosen ? chosen.value : '';
+  }
+  function forgetFilledIn(form) {
+    detailFields(form).forEach(function (field) {
+      if (field.dataset.autofilled === undefined) return;
+      if (field.value === field.dataset.autofilled) field.value = fieldDefault(field);
+      delete field.dataset.autofilled;
+    });
+  }
+  function detailsName(box) {
+    var input = document.querySelector(box.getAttribute('hx-include'));
+    return input ? input.value.trim().toLowerCase() : '';
+  }
+  document.addEventListener('htmx:beforeRequest', function (evt) {
+    var box = evt.detail.elt;
+    if (!isItemDetails(box)) return;
+    var trigger = evt.detail.requestConfig && evt.detail.requestConfig.triggeringEvent;
+    var xhr = evt.detail.xhr;
+    xhr.qmItem = detailsName(box);
+    xhr.qmPick = !!(trigger && trigger.detail && trigger.detail.pick);
+    xhr.qmFields = detailFields(box.closest('form')).map(function (field) { return field.value; });
+  });
+  document.addEventListener('htmx:beforeSwap', function (evt) {
+    if (isItemDetails(evt.detail.target) && evt.detail.xhr.qmItem !== detailsName(evt.detail.target)) evt.detail.shouldSwap = false;
+  });
+  document.addEventListener('htmx:afterSwap', function (evt) {
+    var box = evt.detail.target;
+    if (!isItemDetails(box)) return;
+    var info = box.querySelector('[data-found]');
+    var form = box.closest('form');
+    var xhr = evt.detail.xhr;
+    if (!info || !form) return;
+    if (info.dataset.found !== '1') {
+      forgetFilledIn(form);
+      return;
+    }
+    detailFields(form).forEach(function (field, i) {
+      if (field.value !== xhr.qmFields[i]) return;
+      var mine = field.value !== fieldDefault(field) && field.value !== field.dataset.autofilled;
+      if (mine && !xhr.qmPick) return;
+      var value = info.dataset[DETAIL_FIELDS[field.name]];
+      if (value === undefined || (field.tagName === 'SELECT' && !field.querySelector('option[value="' + value + '"]'))) return;
+      // The DM's own value that the pick agrees with stays theirs, so editing the name later doesn't take it out.
+      if (mine && field.value === value) return;
+      field.value = value;
+      field.dataset.autofilled = value;
+    });
+  });
+
+  // An item's description in a DM's pack or stash row (views/partials/inventory_row.php) stays open when htmx draws
+  // the row again, as − / + do, so reading it while changing the count doesn't fold it away. Kept by the row's id.
+  var openDescriptions = {};
+  document.addEventListener('toggle', function (evt) {
+    var row = evt.target.matches && evt.target.matches('details.item-desc') && evt.target.closest('tr[id]');
+    if (!row) return;
+    if (evt.target.open) openDescriptions[row.id] = true;
+    else delete openDescriptions[row.id];
+  }, true);
+  htmx.onLoad(function (elt) {
+    if (!elt.querySelectorAll) return;
+    Array.prototype.forEach.call(elt.querySelectorAll('details.item-desc'), function (desc) {
+      var row = desc.closest('tr[id]');
+      if (row && openDescriptions[row.id]) desc.open = true;
+    });
+  });
+
   document.addEventListener('reset', function (evt) {
+    // The form's fields go back to their defaults, so nothing in them is filled in any more. Once they have, draw the
+    // description box again for the emptied item field.
+    Array.prototype.forEach.call(evt.target.querySelectorAll('[data-autofilled]'), function (field) { delete field.dataset.autofilled; });
+    Array.prototype.forEach.call(evt.target.querySelectorAll('.item-details'), function (box) {
+      var input = document.querySelector(box.getAttribute('hx-include'));
+      if (input) setTimeout(function () { htmx.trigger(input, 'qm-item-changed'); }, 0);
+    });
     Array.prototype.forEach.call(evt.target.querySelectorAll('.suggest'), function (box) {
       var p = suggestParts(box);
       if (!p) return;

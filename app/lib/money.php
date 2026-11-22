@@ -41,12 +41,14 @@ function coins_from_parts(int $gp, int $sp, int $cp): int
 }
 
 /**
- * Parse a price typed by the DM: "15 gp", "5sp", "1 gp 5 sp", "2.5 gp", or a bare number (gp).
+ * Parse a price typed by the DM: "15 gp", "5sp", "1 gp 5 sp", "2.5 gp", or a bare number (gp). Before a coin, thousands
+ * may be grouped with commas, as coins() writes them ("1,500 gp"), so a price shown in a field reads back as itself.
+ * A bare "1,500" is still refused, since it could as well be a decimal comma.
  * Returns null when the text can't be understood, so callers can fall back to a default.
  */
 function parse_price(string $text): ?int
 {
-    $text = strtolower(trim($text));
+    $text = preg_replace('/(?<=\d),(?=\d{3}(?:,\d{3})*(?:\.\d+)?\s*(?:gp|sp|cp|g|s|c)\b)/', '', strtolower(trim($text)));
     if ($text === '') {
         return null;
     }

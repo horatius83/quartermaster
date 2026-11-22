@@ -23,7 +23,14 @@
         <tbody>
           <?php foreach ($rows as $r): $sid = 'sell-' . (int)$r['id']; ?>
             <tr>
-              <td><div class="item-name"><?= e($r['name']) ?></div><?php if ($r['notes'] !== ''): ?><div class="muted small"><?= e($r['notes']) ?></div><?php endif; ?></td>
+              <td><div class="item-name"><?= e($r['name']) ?></div><?php if ($r['notes'] !== ''): ?><div class="muted small"><?= e($r['notes']) ?></div><?php endif; ?>
+                <?php if (($r['description'] ?? '') !== ''): ?>
+                  <details class="item-desc">
+                    <summary>About the <?= e($r['name']) ?></summary>
+                    <p><?= e($r['description']) ?></p>
+                  </details>
+                <?php endif; ?>
+              </td>
               <td><?= category_tag($r['category'], $r['category_slug']) ?></td>
               <td><?= (int)$r['quantity'] ?></td>
               <td class="nowrap"><?= e(fmt_weight((float)$r['weight'] * (int)$r['quantity'])) ?></td>
@@ -82,7 +89,14 @@
           <tbody>
             <?php foreach ($stash as $r): $tid = 'take-' . (int)$r['id']; ?>
               <tr>
-                <td><div class="item-name"><?= e($r['name']) ?></div><?php if ($r['notes'] !== ''): ?><div class="muted small"><?= e($r['notes']) ?></div><?php endif; ?></td>
+                <td><div class="item-name"><?= e($r['name']) ?></div><?php if ($r['notes'] !== ''): ?><div class="muted small"><?= e($r['notes']) ?></div><?php endif; ?>
+                  <?php if (($r['description'] ?? '') !== ''): ?>
+                    <details class="item-desc">
+                      <summary>About the <?= e($r['name']) ?></summary>
+                      <p><?= e($r['description']) ?></p>
+                    </details>
+                  <?php endif; ?>
+                </td>
                 <td><?= category_tag($r['category'], $r['category_slug']) ?></td>
                 <td><?= (int)$r['quantity'] ?></td>
                 <td class="nowrap"><?= e(fmt_weight((float)$r['weight'] * (int)$r['quantity'])) ?></td>

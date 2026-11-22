@@ -26,6 +26,12 @@
     <label class="field mid">Notes
       <input name="notes" maxlength="255" placeholder="+1, attuned…">
     </label>
+    <?php // As on the stock form (views/dm/stores.php): what the catalog says about the item, and app.js fills in Value, Weight and Category from it. ?>
+    <div id="give-item-details" class="field item-details" style="flex:1 1 100%"
+         hx-get="<?= e(url('/dm/catalog/details')) ?>" hx-include="#give-item-input" hx-vals='{"for": "give-item"}'
+         hx-trigger="qm-item-changed from:#give-item-input, input changed delay:300ms from:#give-item-input" hx-sync="this:replace" hx-target="this" hx-swap="innerHTML">
+      <?= render('partials/item_details', ['id' => 'give-item', 'item' => null, 'name' => '']) ?>
+    </div>
     <button class="btn btn-primary" type="submit"><?= e($button) ?></button>
   </form>
 </section>

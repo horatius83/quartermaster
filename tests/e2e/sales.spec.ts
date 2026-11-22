@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 async function offer(page: Page, item: string, quantity: number, price: string, note = ''): Promise<void> {
   await page.goto('/pack');
   const row = page.locator('tbody tr', { hasText: item });
-  await row.locator('summary').click();
+  await row.locator('summary', { hasText: 'Sell…' }).click();
   await row.getByLabel('How many').fill(String(quantity));
   await row.getByLabel('Asking price, for all').fill(price);
   if (note) {
@@ -120,7 +120,7 @@ test('a player can only offer what is not already on offer, and can withdraw', a
   await signIn(page, 'bryn');
   await offer(page, 'Potion of Healing', 2, '80 gp');
   // One potion is left to offer.
-  await potionRow(page).locator('summary').click();
+  await potionRow(page).locator('summary', { hasText: 'Sell…' }).click();
   await expect(potionRow(page).getByLabel('How many')).toHaveValue('1');
   await offer(page, 'Potion of Healing', 1, '40 gp');
   await expect(potionRow(page)).toContainText('On offer');
@@ -128,7 +128,7 @@ test('a player can only offer what is not already on offer, and can withdraw', a
   await page.locator('#sales li', { hasText: '2 × Potion of Healing' }).getByRole('button', { name: 'Withdraw offer' }).click();
   await expect(toasts(page)).toContainText('Withdrew your offer');
   await expect(page.locator('#sales li')).toHaveCount(1);
-  await potionRow(page).locator('summary').click();
+  await potionRow(page).locator('summary', { hasText: 'Sell…' }).click();
   await expect(potionRow(page).getByLabel('How many')).toHaveValue('2');
 });
 

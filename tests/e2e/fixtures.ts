@@ -18,6 +18,9 @@ export const FROSTGATE = 5;
 
 /** Sign in, dropping any session first so one test can switch between the DM and players. */
 export async function signIn(page: Page, username: string, password = PLAYER_PASSWORD): Promise<void> {
+  // Leave the old page first: a request it still has waiting out a delay would otherwise go out with no cookie and
+  // start a new session under the login form, which then fails its CSRF check.
+  await page.goto('about:blank');
   await page.context().clearCookies();
   await page.goto('/login');
   await page.getByLabel('Username').fill(username);
