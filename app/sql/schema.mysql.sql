@@ -168,6 +168,8 @@ CREATE TABLE cart_items (
   notes         VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
   quantity      INT NOT NULL DEFAULT 1,
   unit_price_cp INT NOT NULL DEFAULT 0,
+  -- The shelf price the line was added at, once the DM has haggled unit_price_cp, or NULL while it costs that.
+  list_price_cp INT NULL,
   UNIQUE KEY uq_cart_item_notes (cart_id, item_id, notes),
   CONSTRAINT fk_cart_items_cart FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE CASCADE,
   CONSTRAINT fk_cart_items_item FOREIGN KEY (item_id) REFERENCES items(id)

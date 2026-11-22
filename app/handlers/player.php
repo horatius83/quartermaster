@@ -108,7 +108,8 @@ function shop_add(int $storeId): void
         htmx_fail("Only {$stock['quantity']} × {$label} in stock.");
     }
     if ($line) {
-        q('UPDATE cart_items SET quantity = ?, unit_price_cp = ? WHERE id = ?', [$newQty, $stock['price_cp'], $line['id']]);
+        // At today's shelf price, which also ends any price the DM haggled for the lot they saw.
+        q('UPDATE cart_items SET quantity = ?, unit_price_cp = ?, list_price_cp = NULL WHERE id = ?', [$newQty, $stock['price_cp'], $line['id']]);
     } else {
         q(
             'INSERT INTO cart_items (cart_id, item_id, notes, quantity, unit_price_cp) VALUES (?, ?, ?, 1, ?)',
@@ -144,7 +145,8 @@ function shop_line_qty(int $lineId): void
         if ($stock && $stock['quantity'] !== null && $newQty > (int)$stock['quantity']) {
             htmx_fail("Only {$stock['quantity']} in stock.");
         }
-        q('UPDATE cart_items SET quantity = ? WHERE id = ?', [$newQty, $lineId]);
+        // A price the DM haggled was for the lot they saw, so a new quantity goes back to the price the line was added at.
+        q('UPDATE cart_items SET quantity = ?, unit_price_cp = COALESCE(list_price_cp, unit_price_cp), list_price_cp = NULL WHERE id = ?', [$newQty, $lineId]);
     }
     cart_panel($char, $store);
 }

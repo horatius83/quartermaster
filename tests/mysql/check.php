@@ -1,6 +1,6 @@
 <?php
 // Checks item tags, rulesets, sales and requests against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
-// upgrades 005, 006, 008, 009, 010 and 011 run, that 006, 009 and 011 finish if interrupted, that the tag column stores, sorts and
+// upgrades 005, 006, 008, 009, 010, 011 and 012 run, that 006, 009 and 011 finish if interrupted, that the tag column stores, sorts and
 // cascades the way the app relies on, and that a sale settles and the party stash moves under MySQL's row locks. Run by
 // tests/mysql/run.mjs.
 declare(strict_types=1);
@@ -9,17 +9,20 @@ putenv('QM_CONFIG=' . __DIR__ . '/config.php');
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $cfg = (require __DIR__ . '/config.php')['mysql'];
 
-// Build the current schema, then undo upgrades 011, 010, 009, 008, 006 and 005: a database from just before them.
+// Build the current schema, then undo upgrades 012, 011, 010, 009, 008, 006 and 005: a database from just before them.
 $raw = new PDO("mysql:host={$cfg['host']};dbname={$cfg['database']};charset=utf8mb4", $cfg['username'], $cfg['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $schema = preg_replace('/^\s*--.*$/m', '', file_get_contents(__DIR__ . '/../../app/sql/schema.mysql.sql'));
 foreach (array_filter(array_map('trim', explode(';', $schema))) as $statement) {
     $raw->exec($statement);
 }
+// The app only looks for missing upgrades when the newest is missing, so every undo below starts with this one.
+$undoHaggledPrices = fn() => $raw->exec('ALTER TABLE cart_items DROP COLUMN list_price_cp');
 $undoPartyPurse = function () use ($raw): void {
     $raw->exec('DROP TABLE party_items');
     $raw->exec('ALTER TABLE inventory_log DROP COLUMN party');
     $raw->exec('ALTER TABLE campaigns DROP COLUMN purse_cp, DROP COLUMN shared_purse');
 };
+$undoHaggledPrices();
 $undoPartyPurse();
 $raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
@@ -52,8 +55,10 @@ $check('upgrade 009 made cart lines unique with their notes', ['uq_cart_item_not
 $columnsOf = fn(string $table, array $names) => array_values(array_intersect($names, array_column(q_all("SHOW COLUMNS FROM {$table}"), 'Field')));
 $check('upgrade 011 gave campaigns a party purse', ['shared_purse', 'purse_cp'], $columnsOf('campaigns', ['shared_purse', 'purse_cp']));
 $check('upgrade 011 created the party stash', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
+$check('upgrade 012 gave cart lines the price they were listed at', ['list_price_cp'], $columnsOf('cart_items', ['list_price_cp']));
 
 // Upgrade 011 stopped before its table: the next run skips the columns that are there and makes it.
+$undoHaggledPrices();
 $raw->exec('DROP TABLE party_items');
 apply_upgrades(db());
 $check('an interrupted upgrade 011 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
@@ -62,6 +67,7 @@ $check('an interrupted upgrade 011 is finished by the next run', 0, (int)q_val('
 // never ran after it, so they're undone too (the app only looks further when the newest one is missing).
 $raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
+$undoHaggledPrices();
 $undoPartyPurse();
 apply_upgrades(db());
 $check('an interrupted upgrade 009 is finished by the next run', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
@@ -77,6 +83,7 @@ $check('the notes keys fit a COMPACT table', ['uq_stock_store_item_notes'], $uni
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
 $raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
+$undoHaggledPrices();
 $undoPartyPurse();
 $raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');

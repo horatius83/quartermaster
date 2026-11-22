@@ -28,6 +28,167 @@ test('a player buys something and the DM approves it', async ({ page }) => {
   await expect(page.locator('li', { hasText: 'The Rusty Anvil' }).locator('.status')).toHaveText('Approved');
 });
 
+test('the DM can settle a haggle by changing a price in one cart, not on the shelf', async ({ page }) => {
+  // Bryn starts with 412 gp; a longsword at The Rusty Anvil costs 15 gp.
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await page.getByRole('button', { name: 'Add Longsword to cart' }).click();
+  await page.getByRole('button', { name: 'One more Longsword' }).click();
+  const cart = page.locator('#cart');
+  await cart.getByLabel('Note to the DM (optional)').fill('Two for 24 gp?');
+  await cart.getByRole('button', { name: 'Send to DM for approval' }).click();
+  await expect(cart).toContainText('Waiting on your DM.');
+
+  await signInAsDm(page);
+  await page.goto('/dm/carts');
+  const card = page.locator('article', { hasText: 'Bryn Ashvale' });
+  const price = card.getByLabel('Price of one Longsword, in this cart');
+  await expect(price).toHaveValue('15 gp');
+  await expect(card.locator('.price-lg')).toHaveText('30 gp');
+
+  // Nonsense, more than one amount, a negative price and a number too big to be one are refused and change nothing.
+  for (const [typed, refusal] of [
+    ['a fair price', 'Type one price'],
+    ['12 gp (was 15 gp)', 'Type one price'],
+    ['-5', 'can’t be below 0 gp'],
+    ['1e400', 'Type one price'],
+  ]) {
+    await price.fill(typed);
+    await price.press('Tab');
+    await expect(page.locator('.toast', { hasText: refusal }).last()).toBeVisible();
+    await expect(card.locator('.price-lg')).toHaveText('30 gp');
+  }
+
+  await price.fill('12 gp');
+  await price.press('Tab');
+  await expect(card.locator('.price-lg')).toHaveText('24 gp');
+  await expect(card).toContainText('shelf price 15 gp');
+
+  // The player sees the haggled price while the cart waits, and the shelf keeps its own.
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await expect(cart).toContainText('12 gp each · shelf price 15 gp');
+  await expect(cart.locator('.price-lg')).toHaveText('24 gp');
+  await expect(page.locator('#wares article', { hasText: 'Longsword' })).toContainText('15 gp');
+
+  // The DM can change the quantity and keep the haggled price.
+  await signInAsDm(page);
+  await page.goto('/dm/carts');
+  await card.getByLabel('Quantity of Longsword').fill('3');
+  await card.getByLabel('Quantity of Longsword').press('Tab');
+  await expect(card.locator('.price-lg')).toHaveText('36 gp');
+  await card.getByLabel('Quantity of Longsword').fill('2');
+  await card.getByLabel('Quantity of Longsword').press('Tab');
+  await expect(card.locator('.price-lg')).toHaveText('24 gp');
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(card.locator('.status')).toHaveText('Approved');
+  await expect(page.locator('.toast', { hasText: 'Bryn Ashvale paid 24 gp' })).toBeVisible();
+
+  await signIn(page, 'bryn');
+  await page.goto('/pack');
+  await expect(page.locator('#purse')).toHaveAttribute('aria-label', 'Purse: 388 gp');
+  await page.goto('/history');
+  await expect(page.locator('tr', { hasText: 'Longsword' }).first()).toContainText('for 12 gp each (shelf price 15 gp)');
+});
+
+test('a haggled price goes back to the shelf’s when cleared, or when the player changes the quantity', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await page.getByRole('button', { name: 'Add Longsword to cart' }).click();
+  await page.getByRole('button', { name: 'Add Shield to cart' }).click();
+  const cart = page.locator('#cart');
+  await cart.getByRole('button', { name: 'Send to DM for approval' }).click();
+
+  await signInAsDm(page);
+  await page.goto('/dm/carts');
+  const card = page.locator('article', { hasText: 'Bryn Ashvale' });
+  const sword = card.getByLabel('Price of one Longsword, in this cart');
+  const shield = card.getByLabel('Price of one Shield, in this cart');
+  await sword.fill('10 gp');
+  await sword.press('Tab');
+  await expect(card).toContainText('shelf price 15 gp');
+  await sword.fill('');
+  await sword.press('Tab');
+  await expect(sword).toHaveValue('15 gp');
+  await expect(card).not.toContainText('shelf price');
+  await sword.fill('10 gp');
+  await sword.press('Tab');
+  await expect(card).toContainText('shelf price 15 gp');
+  await shield.fill('5 sp');
+  await shield.press('Tab');
+  await expect(shield).toHaveValue('5 sp');
+
+  // Bryn withdraws to add a second longsword: that line is a new lot, back at the shelf price. The shield keeps its deal.
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await cart.getByRole('button', { name: 'Withdraw to make changes' }).click();
+  await cart.getByRole('button', { name: 'One more Longsword' }).click();
+  await expect(cart.locator('.cart-line', { hasText: 'Longsword' })).not.toContainText('shelf price');
+  await expect(cart.locator('.cart-line', { hasText: 'Longsword' })).toContainText('30 gp');
+  await expect(cart.locator('.cart-line', { hasText: 'Shield' })).toContainText('5 sp each · shelf price 10 gp');
+});
+
+test('a haggle marks only prices the DM changed, not a shelf price changed since', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await page.getByRole('button', { name: 'Add Shield to cart' }).click();
+  await page.locator('#cart').getByRole('button', { name: 'Send to DM for approval' }).click();
+
+  await signInAsDm(page);
+  await page.goto('/dm/stores');
+  await page.getByRole('link', { name: /The Rusty Anvil/ }).click();
+  const shieldPrice = page.getByLabel('Price of Shield', { exact: true });
+  await shieldPrice.fill('12 gp');
+  await shieldPrice.press('Tab');
+  await expect(page.locator('.toast', { hasText: 'Saved Shield: 12 gp' })).toBeVisible();
+  await page.reload();
+  await expect(shieldPrice).toHaveValue('12 gp');
+
+  // Bryn's cart keeps the 10 gp it was sent at, and nothing calls that a haggle.
+  await page.goto('/dm/carts');
+  const card = page.locator('article', { hasText: 'Bryn Ashvale' });
+  await expect(card.locator('.price-lg')).toHaveText('10 gp');
+  await expect(card).not.toContainText('shelf price');
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(card.locator('.status')).toHaveText('Approved');
+
+  await page.goto('/dm/history');
+  await expect(page.locator('tr', { hasText: 'Shield' }).first()).not.toContainText('shelf price');
+});
+
+test('Approve refuses a cart that changed since the DM’s page showed it', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await page.getByRole('button', { name: 'Add Longsword to cart' }).click();
+  await page.locator('#cart').getByRole('button', { name: 'Send to DM for approval' }).click();
+
+  await signInAsDm(page);
+  await page.goto('/dm/carts');
+  const card = page.locator('article', { hasText: 'Bryn Ashvale' });
+  await expect(card.locator('.price-lg')).toHaveText('15 gp');
+
+  // Another tab haggles the price up while this one still shows 15 gp.
+  const other = await page.context().newPage();
+  await other.goto('/dm/carts');
+  const price = other.locator('article', { hasText: 'Bryn Ashvale' }).getByLabel('Price of one Longsword, in this cart');
+  await price.fill('20 gp');
+  await price.press('Tab');
+  await expect(other.locator('article', { hasText: 'Bryn Ashvale' }).locator('.price-lg')).toHaveText('20 gp');
+  await other.close();
+
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.locator('.toast', { hasText: 'This cart changed since you opened it' })).toBeVisible();
+  await expect(card.locator('.status')).toHaveText('Pending');
+  await expect(card.locator('.price-lg')).toHaveText('20 gp');
+
+  // Now the card shows what it costs, Approve goes through.
+  await card.getByRole('button', { name: 'Approve' }).click();
+  await expect(card.locator('.status')).toHaveText('Approved');
+  await signIn(page, 'bryn');
+  await page.goto('/pack');
+  await expect(page.locator('#purse')).toHaveAttribute('aria-label', 'Purse: 392 gp');
+});
+
 test('a player can withdraw a cart before the DM decides', async ({ page }) => {
   await signIn(page, 'bryn');
   await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
