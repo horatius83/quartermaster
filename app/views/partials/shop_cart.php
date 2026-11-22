@@ -19,7 +19,11 @@ $total = $cart['total_cp'] ?? 0;
     <ul class="list-plain">
       <?php foreach ($lines as $l): $u = url('/shop/line/' . $l['id']); $label = named_with_notes($l['name'], $l['notes']); ?>
         <li class="cart-line">
-          <span class="name"><?= e($l['name']) ?><?php if ($l['notes'] !== ''): ?><br><span class="muted small"><?= e($l['notes']) ?></span><?php endif; ?></span>
+          <span class="name"><?= e($l['name']) ?><?php if ($l['notes'] !== ''): ?><br><span class="muted small"><?= e($l['notes']) ?></span><?php endif; ?>
+            <?php if ($l['list_price_cp'] !== null): ?>
+              <br><span class="muted small"><?= e(coins((int)$l['unit_price_cp'])) ?> each · shelf price <?= e(coins((int)$l['list_price_cp'])) ?></span>
+            <?php endif; ?>
+          </span>
           <?php if ($waiting): ?>
             <span class="muted"><?= (int)$l['quantity'] ?> ×</span>
           <?php else: ?>

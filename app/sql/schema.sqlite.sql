@@ -138,6 +138,8 @@ CREATE TABLE cart_items (
   notes         TEXT NOT NULL DEFAULT '',
   quantity      INTEGER NOT NULL DEFAULT 1,
   unit_price_cp INTEGER NOT NULL DEFAULT 0,
+  -- The shelf price the line was added at, once the DM has haggled unit_price_cp, or NULL while it costs that.
+  list_price_cp INTEGER NULL,
   UNIQUE (cart_id, item_id, notes)
 );
 

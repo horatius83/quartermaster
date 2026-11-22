@@ -678,7 +678,7 @@ function cart_detail(int $cartId): ?array
         return null;
     }
     $cart['lines'] = q_all(
-        'SELECT ci.id, ci.item_id, ci.notes, ci.quantity, ci.unit_price_cp, i.name, i.weight,
+        'SELECT ci.id, ci.item_id, ci.notes, ci.quantity, ci.unit_price_cp, ci.list_price_cp, i.name, i.weight,
                 cat.name AS category, cat.slug AS category_slug,
                 st.quantity AS stock_left
            FROM cart_items ci
@@ -695,7 +695,19 @@ function cart_detail(int $cartId): ?array
         $cart['total_cp'] += (int)$line['quantity'] * (int)$line['unit_price_cp'];
         $cart['unit_count'] += (int)$line['quantity'];
     }
+    $cart['signature'] = cart_signature($cart['lines']);
     return $cart;
+}
+
+/**
+ * What a cart's lines hold, quantities and prices, as one string. The DM's Approve sends the one their page showed,
+ * so a cart that changed since (a player who withdrew and changed it, another tab's haggle) isn't paid for unseen.
+ */
+function cart_signature(array $lines): string
+{
+    $parts = array_map(fn($l) => (int)$l['id'] . ':' . (int)$l['quantity'] . ':' . (int)$l['unit_price_cp'], $lines);
+    sort($parts);
+    return implode(',', $parts);
 }
 
 /** The most a sale can ask or be offered, so a purse can't run past what its column holds (10 million gp). */

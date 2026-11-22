@@ -44,16 +44,21 @@ function coins_from_parts(int $gp, int $sp, int $cp): int
  * Parse a price typed by the DM: "15 gp", "5sp", "1 gp 5 sp", "2.5 gp", or a bare number (gp). Before a coin, thousands
  * may be grouped with commas, as coins() writes them ("1,500 gp"), so a price shown in a field reads back as itself.
  * A bare "1,500" is still refused, since it could as well be a decimal comma.
- * Returns null when the text can't be understood, so callers can fall back to a default.
+ * Returns null when the text can't be understood, or is too big to be a number, so callers can fall back to a default.
+ * With $whole, the text must be nothing but the price: "12 gp (was 15 gp)" is refused rather than read as 27 gp.
  */
-function parse_price(string $text): ?int
+function parse_price(string $text, bool $whole = false): ?int
 {
     $text = preg_replace('/(?<=\d),(?=\d{3}(?:,\d{3})*(?:\.\d+)?\s*(?:gp|sp|cp|g|s|c)\b)/', '', strtolower(trim($text)));
     if ($text === '') {
         return null;
     }
     if (is_numeric($text)) {
-        return (int)round((float)$text * CP_PER_GP);
+        $cp = (float)$text * CP_PER_GP;
+        return is_finite($cp) ? (int)round($cp) : null;
+    }
+    if ($whole && !preg_match('/^(?:\d+(?:\.\d+)?\s*(?:gp|sp|cp|g|s|c)\b\s*)+$/', $text)) {
+        return null;
     }
     if (!preg_match_all('/(\d+(?:\.\d+)?)\s*(gp|sp|cp|g|s|c)\b/', $text, $m, PREG_SET_ORDER)) {
         return null;
@@ -66,5 +71,5 @@ function parse_price(string $text): ?int
             default => 1,
         };
     }
-    return (int)round($total);
+    return is_finite($total) ? (int)round($total) : null;
 }
