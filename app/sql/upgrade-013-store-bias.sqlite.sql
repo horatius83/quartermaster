@@ -1,7 +1,7 @@
 -- Lets the DM charge each character their own share of a store's prices, and keep shelf lines out of sight of some
 -- characters. Everything starts at 100% and seen by everyone, as before. It also lets a store be closed to every
 -- character: until now, unticking everyone under Who can shop here left it open to all.
--- The app runs this itself. By hand: sqlite3 storage/quartermaster.sqlite < app/sql/upgrade-012-store-bias.sqlite.sql   (run once)
+-- The app runs this itself. By hand: sqlite3 storage/quartermaster.sqlite < app/sql/upgrade-013-store-bias.sqlite.sql   (run once)
 
 ALTER TABLE stores ADD COLUMN restricted INTEGER NOT NULL DEFAULT 0;
 -- A store with an access list keeps it. Safe to run again.

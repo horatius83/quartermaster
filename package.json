@@ -4,12 +4,14 @@
   "license": "MIT",
   "description": "Dev tooling only: Playwright end-to-end tests. The app itself needs no Node.",
   "scripts": {
-    "test": "playwright test",
-    "test:chromium": "playwright test --project=chromium",
+    "test": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:all": "playwright test",
     "test:docker": "node tests/e2e/docker.mjs",
     "test:mysql": "node tests/mysql/run.mjs",
-    "test:headed": "playwright test --headed",
-    "test:ui": "playwright test --ui",
+    "test:full": "node tests/full.mjs",
+    "test:headed": "playwright test --project=chromium --headed",
+    "test:ui": "playwright test --project=chromium --ui",
     "test:report": "playwright show-report"
   },
   "devDependencies": {

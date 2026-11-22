@@ -119,6 +119,38 @@ test('a cart withdrawn from the DM comes back without what was pulled or hidden,
   await expect(cart.locator('.price-lg')).toHaveText('22 gp 5 sp');
 });
 
+test('a price the DM haggled stays when the player’s share changes', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await page.getByRole('button', { name: 'Add Longsword to cart' }).click();
+  const cart = page.locator('#cart');
+  await cart.getByRole('button', { name: 'Send to DM for approval' }).click();
+  await expect(cart).toContainText('Waiting on your DM.');
+
+  await signInAsDm(page);
+  await page.goto('/dm/carts');
+  const card = page.locator('article', { hasText: 'Bryn Ashvale' });
+  await card.getByLabel('Price of one Longsword, in this cart').fill('12 gp');
+  await card.getByLabel('Price of one Longsword, in this cart').press('Enter');
+  await expect(toasts(page)).toContainText('Longsword now costs 12 gp each, in this cart only.');
+
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await cart.getByRole('button', { name: 'Withdraw to make changes' }).click();
+  await expect(cart.locator('.price-lg')).toHaveText('12 gp');
+
+  // Raising Bryn's share reprices what he adds, not the deal he struck.
+  await openAnvil(page);
+  await page.getByLabel('Prices for Bryn Ashvale, as a percentage').fill('150');
+  await page.getByRole('button', { name: 'Save details' }).click();
+  await expect(page.getByText('Store details saved.')).toBeVisible();
+  await signIn(page, 'bryn');
+  await page.getByRole('link', { name: 'The Rusty Anvil' }).click();
+  await expect(cart.locator('.cart-line', { hasText: 'Longsword' })).toContainText('12 gp each · shelf price 15 gp');
+  await page.getByRole('button', { name: 'Add Shield to cart' }).click();
+  await expect(cart.locator('.price-lg')).toHaveText('27 gp');
+});
+
 test('a page drawn before a character joined leaves that character as they were', async ({ page }) => {
   await openAnvil(page);
   await page.getByLabel('Prices for Wren Holloway, as a percentage').fill('130');

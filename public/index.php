@@ -92,6 +92,7 @@ $routes = [
     ['POST', '/dm/carts/{id}/approve',     'dm_cart_approve'],
     ['POST', '/dm/carts/{id}/decline',     'dm_cart_decline'],
     ['POST', '/dm/cart-items/{id}',        'dm_cart_item_qty'],
+    ['POST', '/dm/cart-items/{id}/price',  'dm_cart_item_price'],
 
     // DM: offers to sell from a pack
     ['GET',  '/dm/sales',                  'dm_sales'],

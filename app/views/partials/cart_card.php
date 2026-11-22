@@ -22,6 +22,15 @@ $when = $pending ? 'sent ' . time_ago($cart['submitted_at']) : strtolower($label
       <li class="cart-line">
         <span class="name"><?= e($l['name']) ?><?= str_replace('class="tag ', 'class="tag tag-sm ', category_tag($l['category'], $l['category_slug'])) ?>
           <?php if ($l['notes'] !== ''): ?><br><span class="muted small"><?= e($l['notes']) ?></span><?php endif; ?>
+          <?php if ($pending): $listed = $l['list_price_cp'] ?? $l['unit_price_cp']; ?>
+            <br><span class="small">
+              <label class="visually-hidden" for="cp-<?= (int)$l['id'] ?>">Price of one <?= e(named_with_notes($l['name'], $l['notes'])) ?>, in this cart</label>
+              at <input class="input-sm" style="width:96px" id="cp-<?= (int)$l['id'] ?>" name="price" value="<?= e(coins((int)$l['unit_price_cp'])) ?>"
+                placeholder="<?= e(coins((int)$listed)) ?>"
+                hx-post="<?= e(url('/dm/cart-items/' . $l['id'] . '/price')) ?>" hx-trigger="change" hx-target="closest article" hx-swap="outerHTML">
+              each<?php if ($l['list_price_cp'] !== null): ?> <span class="muted">· shelf price <?= e(coins((int)$l['list_price_cp'])) ?></span><?php endif; ?>
+            </span>
+          <?php endif; ?>
           <?php if ($pending && $l['stock_left'] !== null && (int)$l['stock_left'] < (int)$l['quantity']): ?>
             <br><span class="small" style="color:var(--clay-dark)">Only <?= (int)$l['stock_left'] ?> in stock</span>
           <?php endif; ?>
@@ -59,7 +68,7 @@ $when = $pending ? 'sent ' . time_ago($cart['submitted_at']) : strtolower($label
     </p>
     <div class="actions">
       <button class="btn btn-go" type="button" style="flex:1 1 120px"
-        hx-post="<?= e(url('/dm/carts/' . $cart['id'] . '/approve')) ?>" hx-target="closest article" hx-swap="outerHTML">Approve</button>
+        hx-post="<?= e(url('/dm/carts/' . $cart['id'] . '/approve')) ?>" hx-vals='<?= e(json_encode(['seen' => $cart['signature']])) ?>' hx-target="closest article" hx-swap="outerHTML">Approve</button>
     </div>
     <form class="form-row" hx-post="<?= e(url('/dm/carts/' . $cart['id'] . '/decline')) ?>" hx-target="closest article" hx-swap="outerHTML">
       <label class="field grow">Reason <span class="small">(optional, shown to the player)</span>

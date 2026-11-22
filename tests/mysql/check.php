@@ -1,6 +1,6 @@
 <?php
 // Checks item tags, rulesets, sales and requests against a real MySQL or MariaDB, which the SQLite end-to-end tests can't: that
-// upgrades 005, 006, 008, 009, 010, 011 and 012 run, that 006, 009, 011 and 012 finish if interrupted, that the tag column stores, sorts and
+// upgrades 005, 006, 008, 009, 010, 011, 012 and 013 run, that 006, 009, 011 and 013 finish if interrupted, that the tag column stores, sorts and
 // cascades the way the app relies on, and that a sale settles and the party stash moves under MySQL's row locks. Run by
 // tests/mysql/run.mjs.
 declare(strict_types=1);
@@ -9,12 +9,13 @@ putenv('QM_CONFIG=' . __DIR__ . '/config.php');
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $cfg = (require __DIR__ . '/config.php')['mysql'];
 
-// Build the current schema, then undo upgrades 012, 011, 010, 009, 008, 006 and 005: a database from just before them.
+// Build the current schema, then undo upgrades 013, 012, 011, 010, 009, 008, 006 and 005: a database from just before them.
 $raw = new PDO("mysql:host={$cfg['host']};dbname={$cfg['database']};charset=utf8mb4", $cfg['username'], $cfg['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $schema = preg_replace('/^\s*--.*$/m', '', file_get_contents(__DIR__ . '/../../app/sql/schema.mysql.sql'));
 foreach (array_filter(array_map('trim', explode(';', $schema))) as $statement) {
     $raw->exec($statement);
 }
+// The app only looks for missing upgrades when the newest is missing, so every undo below starts with the newest: 013, then 012.
 $undoStoreBias = function () use ($raw): void {
     $raw->exec('DROP TABLE store_prices');
     $raw->exec('DROP TABLE stock_viewers');
@@ -22,12 +23,14 @@ $undoStoreBias = function () use ($raw): void {
     $raw->exec('ALTER TABLE store_stock DROP COLUMN restricted');
     $raw->exec('ALTER TABLE stores DROP COLUMN restricted');
 };
+$undoHaggledPrices = fn() => $raw->exec('ALTER TABLE cart_items DROP COLUMN list_price_cp');
 $undoStoreBias();
 $undoPartyPurse = function () use ($raw): void {
     $raw->exec('DROP TABLE party_items');
     $raw->exec('ALTER TABLE inventory_log DROP COLUMN party');
     $raw->exec('ALTER TABLE campaigns DROP COLUMN purse_cp, DROP COLUMN shared_purse');
 };
+$undoHaggledPrices();
 $undoPartyPurse();
 $raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
@@ -36,7 +39,7 @@ $raw->exec('DROP TABLE sales');
 $raw->exec('DROP TABLE item_tags');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');
 $raw->exec("INSERT INTO campaigns (name, created_at) VALUES ('Older campaign', '2026-01-01 00:00:00')");
-// Two stores from before upgrade 012: one open to everyone, one with a list of who may shop there.
+// Two stores from before upgrade 013: one open to everyone, one with a list of who may shop there.
 $olderCampaign = (int)$raw->lastInsertId();
 $raw->exec("INSERT INTO characters (campaign_id, name, created_at) VALUES ({$olderCampaign}, 'Gate keeper', '2026-01-01 00:00:00')");
 $gateKeeper = (int)$raw->lastInsertId();
@@ -69,9 +72,10 @@ $check('upgrade 009 made cart lines unique with their notes', ['uq_cart_item_not
 $columnsOf = fn(string $table, array $names) => array_values(array_intersect($names, array_column(q_all("SHOW COLUMNS FROM {$table}"), 'Field')));
 $check('upgrade 011 gave campaigns a party purse', ['shared_purse', 'purse_cp'], $columnsOf('campaigns', ['shared_purse', 'purse_cp']));
 $check('upgrade 011 created the party stash', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
-$check('upgrade 012 let shelf lines be hidden', ['restricted'], $columnsOf('store_stock', ['restricted']));
-$check('upgrade 012 lets carts keep the share they were sent at', ['price_pct'], $columnsOf('carts', ['price_pct']));
-$check('upgrade 012 keeps a store’s list of who may shop there', [0, 1], [
+$check('upgrade 012 gave cart lines the price they were listed at', ['list_price_cp'], $columnsOf('cart_items', ['list_price_cp']));
+$check('upgrade 013 let shelf lines be hidden', ['restricted'], $columnsOf('store_stock', ['restricted']));
+$check('upgrade 013 lets carts keep the share they were sent at', ['price_pct'], $columnsOf('carts', ['price_pct']));
+$check('upgrade 013 keeps a store’s list of who may shop there', [0, 1], [
     (int)q_val('SELECT restricted FROM stores WHERE id = ?', [$openShop]),
     (int)q_val('SELECT restricted FROM stores WHERE id = ?', [$gatedShop]),
 ]);
@@ -81,25 +85,27 @@ $check('so the character on it can still shop there, and no one else is let in',
 ]);
 q('DELETE FROM stores WHERE id IN (?, ?)', [$openShop, $gatedShop]);
 q('DELETE FROM characters WHERE id = ?', [$gateKeeper]);
-$check('upgrade 012 created the price and viewer tables', [0, 0], [(int)q_val('SELECT COUNT(*) FROM store_prices'), (int)q_val('SELECT COUNT(*) FROM stock_viewers')]);
+$check('upgrade 013 created the price and viewer tables', [0, 0], [(int)q_val('SELECT COUNT(*) FROM store_prices'), (int)q_val('SELECT COUNT(*) FROM stock_viewers')]);
 
-// Upgrade 012 stopped before its last table: the next run skips the column and table that are there and makes it.
+// Upgrade 013 stopped before its last table: the next run skips the column and table that are there and makes it.
 $raw->exec('DROP TABLE store_prices');
 apply_upgrades(db());
-$check('an interrupted upgrade 012 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM store_prices'));
+$check('an interrupted upgrade 013 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM store_prices'));
 
-// Upgrade 011 stopped before its table: the next run skips the columns that are there and makes it. Upgrade 012 never
-// ran after it, so it's undone too.
+// Upgrade 011 stopped before its table: the next run skips the columns that are there and makes it. Upgrades 012 and 013
+// never ran after it, so they're undone too.
 $undoStoreBias();
+$undoHaggledPrices();
 $raw->exec('DROP TABLE party_items');
 apply_upgrades(db());
 $check('an interrupted upgrade 011 is finished by the next run', 0, (int)q_val('SELECT COUNT(*) FROM party_items'));
 
-// Upgrade 009 stopped after its first table: the next run skips that one and does the other. Upgrades 010, 011
-// and 012 never ran after it, so they're undone too (the app only looks further when the newest one is missing).
+// Upgrade 009 stopped after its first table: the next run skips that one and does the other. Upgrades 010 to
+// 013 never ran after it, so they're undone too (the app only looks further when the newest one is missing).
 $raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id, item_id), DROP INDEX uq_stock_store_item_notes, DROP COLUMN notes');
 $undoStoreBias();
+$undoHaggledPrices();
 $undoPartyPurse();
 apply_upgrades(db());
 $check('an interrupted upgrade 009 is finished by the next run', ['uq_stock_store_item_notes'], $uniqueOn('store_stock'));
@@ -116,6 +122,7 @@ $raw->exec('ALTER TABLE store_stock ADD UNIQUE KEY uq_stock_store_item (store_id
 $raw->exec('ALTER TABLE cart_items ADD UNIQUE KEY uq_cart_item (cart_id, item_id), DROP INDEX uq_cart_item_notes, DROP COLUMN notes');
 $raw->exec('DROP TABLE sales');
 $undoStoreBias();
+$undoHaggledPrices();
 $undoPartyPurse();
 $raw->exec('DROP TABLE requests');
 $raw->exec('ALTER TABLE campaigns DROP COLUMN ruleset_open, DROP COLUMN ruleset');

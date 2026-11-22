@@ -481,7 +481,10 @@ test('a link followed after a deploy loads the page in full, with the new assets
   await page.evaluate(() => document.querySelector('meta[name="qm-assets"]')!.setAttribute('content', 'old'));
   await nav.getByRole('link', { name: 'Cart review' }).click();
   await expect(page).toHaveURL(/\/dm\/carts$/);
-  await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
+  // Evaluating while the full load is under way throws, which counts as not loaded yet.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker).catch(() => 'loading'))
+    .toBeUndefined();
   await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
 });
 
@@ -639,7 +642,10 @@ test('Back to a page htmx no longer has cached loads it in full when the assets 
   });
   await page.goBack();
   await expect(page).toHaveURL(/\/dm\/carts$/);
-  await expect.poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker)).toBeUndefined();
+  // Evaluating while the full load is under way throws, which counts as not loaded yet.
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { qmMarker?: number }).qmMarker).catch(() => 'loading'))
+    .toBeUndefined();
   await expect(page.locator('meta[name="qm-assets"]')).not.toHaveAttribute('content', 'old');
 });
 
@@ -702,7 +708,11 @@ test('the stock form suggests spells a scroll of its level can hold for its note
 
   // An item that isn't a scroll offers nothing.
   await form.getByLabel('Stock an item').fill('Rope');
-  const reply = page.waitForResponse(/\/dm\/stock\/spells\?/);
+  // This search's reply: a slower one for the Hunter’s Mark line above can still arrive first.
+  const reply = page.waitForResponse((r) => {
+    const url = new URL(r.url());
+    return url.pathname.endsWith('/dm/stock/spells') && url.searchParams.get('item') === 'Rope' && url.searchParams.get('notes') === 'fire';
+  });
   await notes.pressSequentially('fire');
   expect(await (await reply).text()).toBe('');
   await expect(spells).toBeHidden();
