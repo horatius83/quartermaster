@@ -268,6 +268,7 @@ function character(int $id): ?array
 function inventory_rows(int $characterId, string $categorySlug = ''): array
 {
     $sql = 'SELECT inv.id, inv.quantity, inv.notes, i.id AS item_id, i.name, i.weight, i.price_cp,
+                   i.description,
                    cat.name AS category, cat.slug AS category_slug
               FROM inventory inv
               JOIN items i ON i.id = inv.item_id

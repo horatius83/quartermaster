@@ -34,7 +34,7 @@ $filtered = function (string $cat, array $tags) use ($base): string {
         <h2 class="card-title"><?= e($w['name']) ?></h2>
         <?php if ($w['notes'] !== ''): ?><p class="muted" style="margin:-4px 0 0"><?= e($w['notes']) ?></p><?php endif; ?>
         <?php if (($w['description'] ?? '') !== ''): ?>
-        <details class="ware-desc">
+        <details class="item-desc">
           <summary>About the <?= e($w['name']) ?></summary>
           <p><?= e($w['description']) ?></p>
         </details>

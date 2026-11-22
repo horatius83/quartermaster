@@ -163,3 +163,15 @@ test('players can read a ware’s description from the catalog', async ({ page }
   // Wares with no description have nothing to open.
   await expect(page.locator('.ware', { hasText: 'Antitoxin' }).locator('details')).toHaveCount(0);
 });
+
+test('players can read the descriptions of what’s in their pack', async ({ page }) => {
+  await signIn(page, 'bryn');
+  await page.goto('/pack');
+  const row = page.locator('tbody tr', { hasText: 'Longsword' });
+  const text = row.getByText('Martial melee weapon. 1d8 slashing, versatile (1d10).');
+  await expect(text).toBeHidden();
+  await row.getByText('About the Longsword').click();
+  await expect(text).toBeVisible();
+  // Items with no description have nothing to open, only the Sell… fold-out.
+  await expect(page.locator('tbody tr', { hasText: 'Silver locket' }).locator('details.item-desc')).toHaveCount(0);
+});

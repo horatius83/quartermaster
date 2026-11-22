@@ -419,10 +419,11 @@ tr.htmx-swapping, li.htmx-swapping, article.htmx-swapping { opacity: 0; transiti
 
 .ware { display: flex; flex-direction: column; gap: 8px; }
 .ware .tag { align-self: flex-start; }
-/* An item's catalog description on its shop card, folded away so the cards stay short. Line breaks are the DM's. */
-.ware-desc > summary { cursor: pointer; display: inline-flex; align-items: center; min-height: 32px; color: var(--clay); text-decoration: underline; }
-.ware-desc[open] > summary { color: var(--ink-soft); }
-.ware-desc > p { margin: 4px 0 0; font-size: 16px; white-space: pre-line; overflow-wrap: anywhere; }
+/* An item's catalog description on its shop card or pack row, folded away so they stay short. Line breaks are the DM's. */
+.item-desc > summary { cursor: pointer; display: inline-flex; align-items: center; min-height: 32px; color: var(--clay); text-decoration: underline; }
+.item-desc[open] > summary { color: var(--ink-soft); }
+.item-desc > p { margin: 4px 0 0; font-size: 16px; white-space: pre-line; overflow-wrap: anywhere; }
+.ledger .item-desc > p { max-width: 60ch; }
 .ware-foot { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--rule); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .price { font-family: var(--display); font-size: 30px; font-weight: 700; color: var(--clay); }
 .price-lg { font-size: 38px; }
