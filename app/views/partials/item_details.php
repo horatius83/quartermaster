@@ -2,8 +2,8 @@
 /**
  * What the catalog says about the item typed or picked on the give or stock form, read-only: its description, plus its
  * price, weight and category as data-* attributes, which app.js copies into the form's fields. Drawn inside the form's
- * details box (see views/dm/inventory.php and views/dm/stores.php), which fetches it again from /dm/catalog/details
- * whenever the item changes.
+ * details box (see views/partials/give_form.php and views/dm/stores.php), which fetches it again from
+ * /dm/catalog/details whenever the item changes.
  *
  * @var string     $id   prefix of the item field's ids, as in partials/item_suggest: give-item or stock-item
  * @var array|null $item the catalog item, or null if the name isn't in the catalog (or nothing is typed)

@@ -147,8 +147,12 @@ function admin_user_delete(int $id): void
             } elseif ($user['role'] === 'dm') {
                 $campaigns = q_all('SELECT id, name FROM campaigns WHERE owner_user_id = ?' . for_update(), [$id]);
                 foreach ($campaigns as $c) {
-                    if (q_val('SELECT 1 FROM characters WHERE campaign_id = ? UNION ALL SELECT 1 FROM stores WHERE campaign_id = ? LIMIT 1', [$c['id'], $c['id']])) {
-                        throw new DomainException("{$user['username']} still runs {$c['name']}. Hand it to another DM, or they need to remove its characters and stores first.");
+                    if (q_val(
+                        'SELECT 1 FROM characters WHERE campaign_id = ? UNION ALL SELECT 1 FROM stores WHERE campaign_id = ?
+                         UNION ALL SELECT 1 FROM party_items WHERE campaign_id = ? LIMIT 1',
+                        [$c['id'], $c['id'], $c['id']]
+                    )) {
+                        throw new DomainException("{$user['username']} still runs {$c['name']}. Hand it to another DM, or they need to remove its characters, stores and party stash first.");
                     }
                 }
                 q('DELETE FROM campaigns WHERE owner_user_id = ?', [$id]);

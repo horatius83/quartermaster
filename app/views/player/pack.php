@@ -1,4 +1,4 @@
-<?php $p = coin_parts((int)$char['coin_cp']); ?>
+<?php $p = coin_parts($coin); ?>
 <div class="player-main">
   <main class="main">
     <header class="page-head">
@@ -6,12 +6,16 @@
         <p class="muted" style="margin:0"><?= e($char['class_label']) ?></p>
         <h1 class="page-title"><?= e($char['name']) ?>’s Pack</h1>
       </div>
-      <div class="card coins" style="font-size:22px">
+      <div class="card coins" style="font-size:22px" id="pack-coins">
+        <?php if ($shared): ?><span class="muted small">Party purse</span><?php endif; ?>
         <span><strong class="gp"><?= number_format($p['gp']) ?></strong> gp</span>
         <span><strong class="sp"><?= $p['sp'] ?></strong> sp</span>
         <span><strong class="cp"><?= $p['cp'] ?></strong> cp</span>
       </div>
     </header>
+    <?php if ($shared): ?>
+      <p class="muted" style="margin:0;max-width:680px">Your party shares one purse: purchases come out of it and sales go into it. Put things in the party stash for anyone in the party to take.</p>
+    <?php endif; ?>
 
     <div class="table-wrap">
       <table class="ledger" style="min-width:640px">
@@ -53,6 +57,18 @@
                       <button class="btn btn-primary" type="submit">Offer to the DM</button>
                     </form>
                   </details>
+                  <?php if ($shared): ?>
+                    <details class="inline sell-details">
+                      <summary aria-label="Put <?= e($r['name']) ?> in the party stash">To party…</summary>
+                      <form class="sell-form card-stack" method="post" action="<?= e(url('/pack/' . $r['id'] . '/stash')) ?>">
+                        <?= csrf_field() ?>
+                        <label class="field tiny" for="<?= $sid ?>-stash-qty">How many
+                          <input id="<?= $sid ?>-stash-qty" name="quantity" type="number" min="1" max="<?= (int)$r['sellable'] ?>" value="<?= (int)$r['sellable'] ?>" required>
+                        </label>
+                        <button class="btn btn-primary" type="submit">Put in the party stash</button>
+                      </form>
+                    </details>
+                  <?php endif; ?>
                 <?php else: ?>
                   <span class="muted small">On offer</span>
                 <?php endif; ?>
@@ -64,6 +80,45 @@
       </table>
     </div>
     <?= render('partials/carried_oob', ['char' => $char, 'carried' => $carried, 'inline' => true]) ?>
+
+    <?php if ($shared): ?>
+      <h2 class="section-title">Party stash</h2>
+      <div class="table-wrap">
+        <table class="ledger" id="party-stash" style="min-width:640px">
+          <thead><tr><th>Item</th><th>Category</th><th>Qty</th><th>Weight</th><th><span class="visually-hidden">Take</span></th></tr></thead>
+          <tbody>
+            <?php foreach ($stash as $r): $tid = 'take-' . (int)$r['id']; ?>
+              <tr>
+                <td><div class="item-name"><?= e($r['name']) ?></div><?php if ($r['notes'] !== ''): ?><div class="muted small"><?= e($r['notes']) ?></div><?php endif; ?>
+                  <?php if (($r['description'] ?? '') !== ''): ?>
+                    <details class="item-desc">
+                      <summary>About the <?= e($r['name']) ?></summary>
+                      <p><?= e($r['description']) ?></p>
+                    </details>
+                  <?php endif; ?>
+                </td>
+                <td><?= category_tag($r['category'], $r['category_slug']) ?></td>
+                <td><?= (int)$r['quantity'] ?></td>
+                <td class="nowrap"><?= e(fmt_weight((float)$r['weight'] * (int)$r['quantity'])) ?></td>
+                <td class="right">
+                  <details class="inline sell-details">
+                    <summary aria-label="Take <?= e($r['name']) ?>">Take…</summary>
+                    <form class="sell-form card-stack" method="post" action="<?= e(url('/pack/stash/' . $r['id'] . '/take')) ?>">
+                      <?= csrf_field() ?>
+                      <label class="field tiny" for="<?= $tid ?>-qty">How many
+                        <input id="<?= $tid ?>-qty" name="quantity" type="number" min="1" max="<?= (int)$r['quantity'] ?>" value="<?= (int)$r['quantity'] ?>" required>
+                      </label>
+                      <button class="btn btn-primary" type="submit">Take into my pack</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            <?php if (!$stash): ?><tr><td colspan="5" class="empty">The party stash is empty.</td></tr><?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endif; ?>
 
     <?php if ($offers || $sold): ?>
       <h2 class="section-title">Your offers to sell</h2>

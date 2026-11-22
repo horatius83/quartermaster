@@ -35,7 +35,8 @@ function dm_cart_approve(int $cartId): void
             if (!$cart || $cart['status'] !== 'submitted') {
                 throw new RuntimeException('That cart has already been handled.');
             }
-            $char = q_one('SELECT * FROM characters WHERE id = ?' . for_update(), [$cart['character_id']]);
+            $purse = lock_purse((int)$cart['character_id']);
+            $char = $purse['char'];
             $storeName = (string)q_val('SELECT name FROM stores WHERE id = ?', [$cart['store_id']]);
             $lines = q_all(
                 'SELECT ci.*, i.name FROM cart_items ci JOIN items i ON i.id = ci.item_id WHERE ci.cart_id = ?',
@@ -48,8 +49,11 @@ function dm_cart_approve(int $cartId): void
             foreach ($lines as $l) {
                 $total += (int)$l['quantity'] * (int)$l['unit_price_cp'];
             }
-            if ($total > (int)$char['coin_cp']) {
-                throw new RuntimeException("{$char['name']} is short " . coins($total - (int)$char['coin_cp']) . '. Adjust the cart or their purse first.');
+            if ($total > $purse['coin']) {
+                $short = coins($total - $purse['coin']);
+                throw new RuntimeException($purse['shared']
+                    ? "The party purse is short {$short}. Adjust the cart or the purse first."
+                    : "{$char['name']} is short {$short}. Adjust the cart or their purse first.");
             }
             foreach ($lines as $l) {
                 $label = named_with_notes($l['name'], $l['notes']);
@@ -69,8 +73,7 @@ function dm_cart_approve(int $cartId): void
                 add_to_inventory((int)$char['id'], (int)$l['item_id'], (int)$l['quantity'], $l['notes']);
                 log_inventory((int)$char['id'], 'purchase', $l, (int)$l['quantity'], notes: $l['notes'], detail: 'Bought at ' . $storeName);
             }
-            q('UPDATE characters SET coin_cp = coin_cp - ? WHERE id = ?', [$total, $char['id']]);
-            log_inventory((int)$char['id'], 'purchase', coinCp: -$total, detail: 'Paid at ' . $storeName);
+            change_purse($purse, -$total, 'purchase', 'Paid at ' . $storeName, "Paid at {$storeName}, for {$char['name']}");
             q("UPDATE carts SET status = 'approved', decided_at = ? WHERE id = ?", [now(), $cartId]);
         });
     } catch (RuntimeException $e) {
@@ -78,7 +81,9 @@ function dm_cart_approve(int $cartId): void
     }
 
     $cart = cart_detail($cartId);
-    toast("Approved. {$cart['character_name']} paid " . coins($cart['total_cp']) . '.');
+    toast((int)$cart['shared_purse']
+        ? "Approved. The party purse paid " . coins($cart['total_cp']) . " for {$cart['character_name']}’s cart."
+        : "Approved. {$cart['character_name']} paid " . coins($cart['total_cp']) . '.');
     echo render('partials/cart_card', ['cart' => $cart]);
     echo render('partials/badge_oob', ['id' => 'cart-badge', 'count' => pending_cart_count()]);
     exit;

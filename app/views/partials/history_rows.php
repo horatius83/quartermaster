@@ -1,5 +1,5 @@
 <?php
-/** @var array $rows @var bool $hasMore @var bool $showCharacter @var string $path */
+/** @var array $rows @var bool $hasMore @var bool $showCharacter @var bool $markParty label the party's entries @var string $path */
 $cols = $showCharacter ? 5 : 4;
 $labels = [
     'give'     => 'Given by the DM',
@@ -16,7 +16,7 @@ foreach ($rows as $l):
   <tr>
     <td class="nowrap" title="<?= e($l['created_at']) ?> UTC"><?= e(time_ago($l['created_at'])) ?></td>
     <?php if ($showCharacter): ?>
-      <td><?php if ($l['character_id'] !== null): ?><a href="<?= e(url('/dm/history/' . $l['character_id'])) ?>"><?= e($l['character_name']) ?></a><?php else: ?><?= e($l['character_name']) ?> <span class="muted small">(left the party)</span><?php endif; ?></td>
+      <td><?php if ((int)($l['party'] ?? 0)): ?><a href="<?= e(url('/dm/history/party')) ?>">Party purse</a><?php elseif ($l['character_id'] !== null): ?><a href="<?= e(url('/dm/history/' . $l['character_id'])) ?>"><?= e($l['character_name']) ?></a><?php else: ?><?= e($l['character_name']) ?> <span class="muted small">(left the party)</span><?php endif; ?></td>
     <?php endif; ?>
     <td>
       <?php if ($l['item_name'] !== ''): ?>
@@ -27,7 +27,7 @@ foreach ($rows as $l):
         <span class="delta <?= $up ? 'delta-up' : 'delta-down' ?>"><?= $up ? '+' : '−' ?><?= e(coins(abs((int)$l['coin_cp']))) ?></span>
       <?php endif; ?>
     </td>
-    <td><?= e($labels[$l['action']] ?? $l['action']) ?><?php if ($l['detail'] !== ''): ?><div class="muted small"><?= e($l['detail']) ?></div><?php endif; ?></td>
+    <td><?php if ($markParty && (int)$l['party']): ?><span class="status status-open">Party</span> <?php endif; ?><?= e($labels[$l['action']] ?? $l['action']) ?><?php if ($l['detail'] !== ''): ?><div class="muted small"><?= e($l['detail']) ?></div><?php endif; ?></td>
     <td class="muted"><?= e($l['actor_name'] !== '' ? $l['actor_name'] : '—') ?></td>
   </tr>
 <?php endforeach; ?>

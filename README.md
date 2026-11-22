@@ -2,8 +2,8 @@
 
 A small web app for running a tabletop RPG's economy. The DM keeps every player's pack and purse, opens shops with their own stock, and approves what players put in their carts.
 
-- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system, approve or decline carts, accept, counter or reject players' offers to sell, answer players' requests, and review the history of every pack and purse.
-- **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, offer things from their pack for sale, write requests and comments to the DM, and see their own pack and its history.
+- **DM:** run several campaigns side by side, each with its own party, stores and history; party dashboard, edit any character's inventory and coin, manage stores and who can shop in them, keep an item catalog per system, approve or decline carts, accept, counter or reject players' offers to sell, answer players' requests, let a campaign's party share one purse and stash, and review the history of every pack and purse.
+- **Players:** browse the shops the DM has opened to them, fill a cart, send it for approval, offer things from their pack for sale, write requests and comments to the DM, share items through the party stash, and see their own pack and its history.
 - **Admin:** load each system's SRD gear and magic items into its catalog from the dashboard, add and delete DMs and other logins, and read the account log of every login added or deleted.
 
 Plain PHP (8.1+) and MySQL/MariaDB. No framework and no Composer, so it runs on shared hosting such as Hostinger. [htmx](https://htmx.org) handles the in-page updates (quantity steppers, filters, cart, approvals). htmx and the fonts are served from `public/assets`, so pages load nothing from other sites. Their licences are alongside them, and they need to stay deployed with them.
@@ -14,7 +14,7 @@ Everything is stored in copper pieces (1 gp = 10 sp = 100 cp) and shown as gp/sp
 
 Coin only changes hands when the DM approves a cart. Approving a cart:
 
-1. checks that the purse and the store's stock cover the cart,
+1. checks that the purse (the party purse, if the campaign shares one) and the store's stock cover the cart,
 2. takes the coin,
 3. lowers the stock (a blank stock count means unlimited),
 4. stacks the items into the character's pack, with the notes their shelf line had.
@@ -23,7 +23,7 @@ All four steps happen in one transaction.
 
 A shelf line can have notes (up to 191 characters), such as which spell a level 1 spell scroll holds. The same item can be stocked more than once with different notes, and players see the notes on the shelf, in their cart and in their pack. Notes match exactly, so "Shield" and "shield" are two lines. Curly quotes are saved straight, though, so "Hunter’s Mark" typed on a phone is the same line as "Hunter's Mark". New notes make a line a different thing, so changing them takes the line out of open carts, like pulling it from the shelf, and waits until any cart sent to the DM that holds it is approved or declined. For a spell scroll (an item named like "Spell scroll (3rd level)", "Scroll, 3rd-level spell" or "Level 3 scroll"), typing in the stock form's *Notes* suggests the SRD spells a scroll of its level can hold. In 5e that's the level's spells first, then lower ones cast at it (cantrip scrolls get cantrips). In 3.5e a spell's level depends on who casts it, so it's the spells that are that level on any class or domain list, each with the lists that have it there (*Brd, Clr, Drd, Pal, Healing domain*). Pathfinder campaigns have no spell list yet, so their notes get no suggestions, and nor do notes edited on the shelf.
 
-Picking an item in the stock form shows its catalog description, read-only, and fills in Price, Weight and Category from the catalog. Change any of them before *Add to shelf* to stock it at another price. Typing an item's catalog name in full does the same, except that it leaves alone a field you've changed yourself. Typing in the item field again takes out what was filled in straight away, so a quick *Add to shelf* never stocks one item at another's price, and a name the catalog doesn't have yet clears the description. The *Give an item* form on a character's pack shows the description and fills in Value, Weight and Category the same way, though as its note says, those only count for an item new to the catalog. Players see each ware's description on its card in the shop, and each item's in their pack, under *About the …*.
+Picking an item in the stock form shows its catalog description, read-only, and fills in Price, Weight and Category from the catalog. Change any of them before *Add to shelf* to stock it at another price. Typing an item's catalog name in full does the same, except that it leaves alone a field you've changed yourself. Typing in the item field again takes out what was filled in straight away, so a quick *Add to shelf* never stocks one item at another's price, and a name the catalog doesn't have yet clears the description. The *Give an item* form on a character's pack (and *Add to the stash* on the *Party stash* page) shows the description and fills in Value, Weight and Category the same way, though as its note says, those only count for an item new to the catalog. Players see each ware's description on its card in the shop, and each item's in their pack and the party stash, under *About the …*.
 
 ## Selling from a pack
 
@@ -35,13 +35,23 @@ Players sell from *My pack*: *Sell…* on a row asks how many and an asking pric
 
 A sale only goes through if the pack still holds the items, so a DM who has meanwhile removed or moved them is told to reject the offer instead. Sales are written to the pack history as *Sold*, one entry for the items and one for the coin, like purchases. Sold items leave the game; they don't go onto a shop's shelves. An open offer keeps its item in the catalog; once every offer for an item is settled, deleting the item from the catalog deletes those offers too, and the pack history still shows the sales.
 
+## The party purse
+
+A campaign can have its party share one purse and one stash of loot. The DM turns it on or off for each campaign under *Campaigns*, with *Share one purse* or *Stop sharing* under the party in the *Party* column.
+
+- **Turning it on** pools every character's coin in the party purse. While it's on, all coin goes there and comes from there: approving a cart takes it from the party purse, and a sale pays into it. Characters' own purses stay empty, so the DM edits the coin on the *Party stash* page (the first pill under *Player inventories*) instead of on each pack.
+- **The party stash** holds items any of the party can use. On *My pack*, *To party…* on a row puts some or all of a stack in the stash (not the items on offer to sell), and the *Party stash* list below takes them out into the pack. Anyone in the party can take anything. The DM can also add items to the stash, change counts, hand stacks to characters, and move a whole stack from a pack into it with *Move to… → Party stash*. To sell something from the stash, a player takes it into their pack first.
+- **Turning it off** splits the party purse evenly between the party; coppers that don't divide go one each to the first characters in name order. Whatever is left in the stash stays there, out of the players' sight, for the DM to hand out from the *Party stash* page. The purse can't be turned off with coin in it and nobody to share it with.
+
+Every movement is written to the pack history: coin pooled or split, items put in or taken out (one entry on each side, like a move between characters), and the stash's purchases and sales, which say whose cart or offer they were. The DM's *Pack history* has a *Party purse* pill for the purse and stash alone, and players see the party's entries, marked *Party*, among their own.
+
 ## Requests to the DM
 
 Players write to the DM from *Requests*: an item no shop stocks, a question, a comment, up to 2,000 characters, with the line breaks they type. Each goes to the DM under *Player requests*, with a badge in the sidebar and a list on the dashboard. The DM either replies (up to 1,000 characters), which closes the request and shows the reply to the player, or closes it without one, for things settled at the table. A player's *Requests* link shows a badge for each reply they haven't seen yet, until they open the page. Players can withdraw a request until the DM closes it, and can have 20 waiting at once. Requests belong to the character, so they go when the character leaves the party.
 
 ## Campaigns
 
-One DM login can run several campaigns, and each DM sees only their own. Each campaign has its own party, stores, carts and pack history; the item catalog is shared by every campaign of the same system and by every DM, so each can stock the same gear at its own prices (see *Systems and the SRD items*). The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters and stores are gone.
+One DM login can run several campaigns, and each DM sees only their own. Each campaign has its own party, stores, carts, party purse and pack history; the item catalog is shared by every campaign of the same system and by every DM, so each can stock the same gear at its own prices (see *Systems and the SRD items*). The DM picks the campaign at the top of the sidebar, and every DM page shows only that campaign. Start, rename and delete campaigns under *Campaigns*. A campaign can only be deleted once its characters, stores and party stash are gone.
 
 Each player login belongs to one character, so it sees only that character's campaign. Someone playing in two campaigns gets a login for each.
 
@@ -64,7 +74,7 @@ The 5e data comes from SRD 5.1 (CC BY 4.0) by way of the [5e-bits database](http
 
 There are three kinds of login. The **admin** manages logins under *Users*: it adds DMs (or more admins), deletes any login except its own and the last admin, and hands a campaign, party and all, from one DM to another. It doesn't run campaigns, so if you're also a DM you keep a separate DM login. **DMs** add their players under *Party & logins*, each with a character.
 
-Deleting a player leaves their character in the party without a login. A DM can only be deleted once their campaigns have no characters or stores (hand a campaign to another DM to keep it); their empty campaigns are deleted with them.
+Deleting a player leaves their character in the party without a login. A DM can only be deleted once their campaigns have no characters, stores or party stash (hand a campaign to another DM to keep it); their empty campaigns are deleted with them.
 
 Admins and DMs change their own password under *Change password*. The admin can also reset a DM's password from *Users*, and DMs reset their players' under *Party & logins*. A new password signs that login out everywhere else.
 
@@ -78,9 +88,9 @@ A new install has no admin at first: `/setup` makes the first DM. Until an admin
 
 ## Pack history
 
-Every change to a pack or purse is written to `inventory_log`: items the DM gives, − / + adjustments, removals, moves between characters (one entry on each side), cart purchases, and purse edits. Each entry records who made it and when. Several clicks in the same direction on the same stack, within five minutes of the first, are folded into one entry; a − after a + starts a new one, so nothing is erased. Entries keep the character's name, so the history stays readable after a character leaves the party.
+Every change to a pack or purse is written to `inventory_log`: items the DM gives, − / + adjustments, removals, moves between characters (one entry on each side), cart purchases, and purse edits. Changes to a party purse and stash are written there too, with no character (`party` = 1). Each entry records who made it and when. Several clicks in the same direction on the same stack, within five minutes of the first, are folded into one entry; a − after a + starts a new one, so nothing is erased. Entries keep the character's name, so the history stays readable after a character leaves the party.
 
-The DM sees it under *Pack history*, for the whole party or one character. Players see only their own, under *History*.
+The DM sees it under *Pack history*, for the whole party, the party purse or one character. Players see only their own, under *History*, along with the party purse's while their campaign shares one.
 
 ## Upgrading an existing install
 
@@ -97,8 +107,9 @@ Older databases are brought up to date automatically on the first request after 
 - **008, sales:** adds the table for players' offers to sell from their packs. Safe to run again.
 - **009, stock notes:** gives shelf and cart lines notes, so a store can stock the same item more than once, each with its own notes (a level 1 spell scroll of each spell). Existing shelves and carts keep what they had, with no notes.
 - **010, requests:** adds the table for players' requests to the DM. Safe to run again.
+- **011, party purse:** lets a campaign share one purse and a stash of items between its party, and adds the stash's table. Every campaign starts with purses of their own, as before.
 
-If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006, 007 and 009 only once each: unlike 001, 005, 008 and 010, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
+If your database user can't change tables, import the missing files yourself through phpMyAdmin, in order. Import 002, 003, 004, 006, 007, 009 and 011 only once each: unlike 001, 005, 008 and 010, a second import stops at the first column that already exists. (When the app runs it, it skips the changes that are already there.)
 
 ## Deploying to Hostinger
 
@@ -139,7 +150,7 @@ npm test
 
 The tests start PHP's built-in server on port 8099 (`QM_E2E_PORT` moves it) with `tests/e2e/config.php` (picked via the `QM_CONFIG` environment variable), which uses its own SQLite files in `/dev/shm` (memory-backed storage, so writes don't wait on the disk), or in the system temp folder where there's no `/dev/shm`. Your `app/config.php` and database are never touched. The demo seed is built once per run, and every test starts from a fresh copy of it, made by the test server's `/__test/reset` route (`tests/e2e/router.php`). Four workers run tests side by side (`QM_E2E_WORKERS` changes how many), each with a database of its own (`tests/e2e/test-db.php`), named by the server's port as well, so runs on different ports never share files. Requests that don't name their worker's database are refused rather than given another's. The test config hashes passwords at bcrypt's lowest cost, since PHP's default takes about 0.2 s per hash. Outside CI, a server already listening on the port is reused; if it is one left over from an older checkout, without the test routes, the run stops straight away and says so.
 
-Those tests all use SQLite. `npm run test:mysql` checks the item tags, rulesets, sales, stock notes and requests upgrades, the tags table, settling a sale, the longest request and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
+Those tests all use SQLite. `npm run test:mysql` checks the item tags, rulesets, sales, stock notes, requests and party purse upgrades, the tags table, settling a sale, moving stacks through the party stash, the longest request and the SRD data against throwaway MySQL and MariaDB containers (`tests/mysql/`), and needs only Docker.
 
 PHP is found in this order: the `PHP` environment variable (the path to `php`), `php` on your PATH, then, on Windows, `wsl php`, so PHP installed inside WSL works with Node on Windows. With WSL's default networking, Windows reaches that server through a relay, and the odd browser request can fail with `net::ERR_ADDRESS_IN_USE`. Setting `networkingMode=mirrored` under `[wsl2]` in `%USERPROFILE%\.wslconfig`, then running `wsl --shutdown`, removes the relay. `npm run test:ui` opens Playwright's interactive runner, and `npm run test:report` shows the last HTML report.
 
@@ -160,7 +171,7 @@ tests/mysql/       checks of item tags, rulesets, sales, requests and the SRD da
 
 ## How htmx is used
 
-Every page is rendered on the server. `<body hx-boost="true">` turns ordinary links and forms into partial page swaps. Interactive bits post to small endpoints that return just the HTML fragment to replace:
+Every page is rendered on the server. `<body hx-boost="true">` turns ordinary links and forms into partial page swaps. A link whose page redirects (*Player inventories* to the first pack, *Shops* to the first shop) gets a plain redirect, which is followed inside the swap; a form that redirects gets `HX-Redirect`, a full page load. Interactive bits post to small endpoints that return just the HTML fragment to replace:
 
 | Interaction | Request | Swaps |
 | --- | --- | --- |
@@ -177,6 +188,7 @@ Every page is rendered on the server. `<body hx-boost="true">` turns ordinary li
 | Pack history “Show older” | `GET /dm/history?before=…`, `GET /history?before=…` | replaces the button row with the next 50 entries |
 | Approve / decline / adjust cart | `POST /dm/carts/…` | that cart card, plus the sidebar badge |
 | Accept / counter / reject an offer to sell | `POST /dm/sales/…` | that offer's card, plus the sidebar badge |
+| Party stash − / +, give, remove; party purse | `POST /dm/stash/{id}/…`, `/dm/party-stash/…` | that row, the table body, or the purse form |
 | Reply to / close a request | `POST /dm/requests/…` | that request's card, plus the sidebar badge |
 
 A catalog row posts all its fields when one changes, so a row showing old values would save them over newer ones. Four things keep rows current: Back and Forward reload the page from the server (`hx-history="false"`), a row locks while it saves, all rows lock while the table redraws (`hx-disabled-elt`), and a redraw waits for saves in flight (`public/assets/app.js`). Don't use `hx-sync` with `queue` for this: htmx silently drops a queued request once the response before it has replaced its element. The shop also opts out of history snapshots, because they'd show an old cart and old stock counts.
@@ -190,7 +202,7 @@ Messages are sent as an `HX-Trigger: {"qm-toast": …}` header and shown by `pub
 - Every POST is CSRF-checked.
 - All SQL uses prepared statements.
 - All output is escaped with `e()`.
-- Players can only see their own pack, history, carts, offers to sell and requests, and only the stores the DM has opened to them.
+- Players can only see their own pack, history, carts, offers to sell and requests, their own campaign's party purse and stash while it shares one, and only the stores the DM has opened to them.
 
 ## License
 
