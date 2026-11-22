@@ -143,7 +143,9 @@ test.describe('DM', () => {
     await expect(page.locator('#catalog-body tr')).toHaveCount(1);
     await expect(rowOf(page, 'Longbow')).toBeVisible();
 
+    // One step at a time: a second Back during the first one's restore can land on the wrong rows.
     await page.goBack();
+    await expect(page.locator('#catalog-body tr')).toHaveCount(3);
     await page.goBack();
     await expect(page.locator('#catalog-body tr')).toHaveCount(28);
     await expect(ticked('ranged')).not.toBeChecked();
