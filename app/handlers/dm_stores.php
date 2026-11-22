@@ -38,8 +38,62 @@ function dm_store(int $storeId): void
         'store'      => $store,
         'stock'      => store_stock_rows($storeId),
         'characters' => party_names(),
-        'access'     => store_access_ids($storeId),
+        'access'     => store_access_ids($store),
+        'pcts'       => store_price_pcts($storeId),
     ], $store['name']);
+}
+
+/**
+ * The price shares posted for the party, [character id => percent], with 100% and blanks left out. Characters the
+ * page didn't show (it predates them, or prices per character) keep $current's share. Null if one isn't a percentage.
+ */
+function posted_price_pcts(array $characterIds, array $current): ?array
+{
+    if (!isset($_POST['pct'])) {
+        return $current;
+    }
+    $posted = $_POST['pct'];
+    if (!is_array($posted)) {
+        return null;
+    }
+    $pcts = [];
+    foreach ($characterIds as $cid) {
+        if (!array_key_exists($cid, $posted)) {
+            if (isset($current[$cid])) {
+                $pcts[$cid] = $current[$cid];
+            }
+            continue;
+        }
+        if (!is_string($posted[$cid])) {
+            return null;
+        }
+        $text = trim(str_replace('%', '', $posted[$cid]));
+        if ($text === '') {
+            continue;
+        }
+        if (!ctype_digit($text) || (int)$text > MAX_PRICE_PCT) {
+            return null;
+        }
+        if ((int)$text !== 100) {
+            $pcts[$cid] = (int)$text;
+        }
+    }
+    return $pcts;
+}
+
+/**
+ * Who a list of the party's names with ticks ("Who can shop here", a shelf line's "Seen by") leaves ticked, as ids.
+ * The list posts $field[] for the ticked and {$field}_shown[] for every name it showed. A character it didn't show
+ * (who joined after the page was drawn) keeps what they had: in if $current is null (everyone), else if in $current.
+ * Pages drawn before {$field}_shown existed showed everyone.
+ */
+function posted_party_choice(array $allIds, string $field, ?array $current): array
+{
+    $ticked = array_map('intval', (array)($_POST[$field] ?? []));
+    $shown = isset($_POST[$field . '_shown']) ? array_map('intval', (array)$_POST[$field . '_shown']) : $allIds;
+    return array_values(array_filter($allIds, fn($cid) => in_array($cid, $shown, true)
+        ? in_array($cid, $ticked, true)
+        : ($current === null || in_array($cid, $current, true))));
 }
 
 function dm_store_update(int $storeId): void
@@ -48,15 +102,34 @@ function dm_store_update(int $storeId): void
     $store = store($storeId) ?? abort(404, 'No such store.');
     $name = post_str('name', 100) ?: $store['name'];
     $allIds = array_map('intval', array_column(party_names(), 'id'));
-    $chosen = array_values(array_intersect($allIds, array_map('intval', (array)($_POST['access'] ?? []))));
+    $chosen = posted_party_choice($allIds, 'access', store_access_ids($store));
+    $pcts = posted_price_pcts($allIds, store_price_pcts($storeId));
+    if ($pcts === null) {
+        htmx_fail('Write each character’s prices as a percentage from 0 to ' . MAX_PRICE_PCT . ', like 100 for the usual prices or 120 for a fifth more.');
+    }
 
-    transaction(function () use ($storeId, $name, $chosen, $allIds) {
-        q('UPDATE stores SET name = ?, kind = ?, blurb = ? WHERE id = ?', [$name, post_str('kind', 100), post_str('blurb', 1000), $storeId]);
+    transaction(function () use ($storeId, $name, $chosen, $allIds, $pcts) {
+        // Everyone ticked = no restriction (so new characters can shop too). Nobody ticked = nobody.
+        $restricted = count($chosen) < count($allIds);
+        q(
+            'UPDATE stores SET name = ?, kind = ?, blurb = ?, restricted = ? WHERE id = ?',
+            [$name, post_str('kind', 100), post_str('blurb', 1000), $restricted ? 1 : 0, $storeId]
+        );
         q('DELETE FROM store_access WHERE store_id = ?', [$storeId]);
-        // Everyone ticked = no restriction (so new characters can shop too).
-        if (count($chosen) < count($allIds)) {
+        if ($restricted) {
             foreach ($chosen as $cid) {
                 q('INSERT INTO store_access (store_id, character_id) VALUES (?, ?)', [$storeId, $cid]);
+            }
+        }
+        $before = store_price_pcts($storeId);
+        q('DELETE FROM store_prices WHERE store_id = ?', [$storeId]);
+        foreach ($pcts as $cid => $pct) {
+            q('INSERT INTO store_prices (store_id, character_id, price_pct) VALUES (?, ?, ?)', [$storeId, $cid, $pct]);
+        }
+        // Open carts show the new prices straight away.
+        foreach ($allIds as $cid) {
+            if (($before[$cid] ?? 100) !== ($pcts[$cid] ?? 100)) {
+                reprice_open_cart($storeId, $cid);
             }
         }
     });
@@ -118,7 +191,7 @@ function dm_stock_add(int $storeId): void
         toast("Stocked {$label}.");
     }
     header('HX-Trigger-After-Swap: ' . json_encode(['qm-reset' => ['form' => '#stock-form']]));
-    fragment('partials/stock_body', ['stock' => store_stock_rows($storeId)]);
+    fragment('partials/stock_body', ['stock' => store_stock_rows($storeId), 'party' => party_names()]);
 }
 
 /** Spells for the stock form's Notes, when the item being stocked is a spell scroll: those a scroll of its level can hold. */
@@ -195,7 +268,40 @@ function dm_stock_update(int $stockId): void
     }
     toast("Saved {$label}: " . coins($price) . ', ' . ($qty === null ? 'unlimited' : $qty . ' in stock') . '.'
         . ($dropped ? ' Taken out of ' . ($dropped === 1 ? 'an open cart' : "{$dropped} open carts") . '.' : ''));
-    fragment('partials/stock_row', ['s' => stock_row($stockId)]);
+    fragment('partials/stock_row', ['s' => stock_row($stockId), 'party' => party_names()]);
+}
+
+/**
+ * Who sees one shelf line: everyone ticked is everyone (characters who join later too), otherwise only those ticked.
+ * Characters who no longer see it lose it from their open carts, as when it's pulled from the shelf.
+ */
+function dm_stock_viewers(int $stockId): void
+{
+    require_dm();
+    $row = stock_row($stockId) ?? abort(404, 'That item is no longer stocked.');
+    $party = party_names();
+    $allIds = array_map('intval', array_column($party, 'id'));
+    $chosen = posted_party_choice($allIds, 'viewers', $row['viewers']);
+    $everyone = count($chosen) === count($allIds);
+
+    $dropped = transaction(function () use ($stockId, $chosen, $everyone) {
+        q('UPDATE store_stock SET restricted = ? WHERE id = ?', [$everyone ? 0 : 1, $stockId]);
+        q('DELETE FROM stock_viewers WHERE stock_id = ?', [$stockId]);
+        if (!$everyone) {
+            foreach ($chosen as $cid) {
+                q('INSERT INTO stock_viewers (stock_id, character_id) VALUES (?, ?)', [$stockId, $cid]);
+            }
+        }
+        return remove_unseen_from_open_carts($stockId);
+    });
+    $label = named_with_notes($row['name'], $row['notes']);
+    $names = array_column(array_filter($party, fn($c) => in_array((int)$c['id'], $chosen, true)), 'name');
+    toast(match (true) {
+        $everyone => "Everyone can see {$label}.",
+        !$chosen  => "{$label} is hidden from every player.",
+        default   => 'Only ' . implode(', ', $names) . " can see {$label}.",
+    } . ($dropped ? ' Taken out of ' . ($dropped === 1 ? 'an open cart' : "{$dropped} open carts") . '.' : ''));
+    fragment('partials/stock_row', ['s' => stock_row($stockId), 'party' => $party, 'seenOpen' => true]);
 }
 
 function dm_stock_delete(int $stockId): void

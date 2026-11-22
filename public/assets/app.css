@@ -375,6 +375,20 @@ details.inline > summary::-webkit-details-marker { display: none; }
 details.inline[open] > summary { color: var(--ink-soft); }
 .move-form { display: inline-flex; gap: 6px; align-items: center; }
 
+/* The store form's party list: who can shop there, each with the share of the prices they pay. */
+.form-row > .shop-access { flex: 1 1 250px; flex-direction: column; flex-wrap: nowrap; }
+.shop-access .access-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shop-access .access-row .check { white-space: nowrap; }
+.pct-hint { text-align: right; margin-bottom: -4px; }
+.pct-field { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-soft); }
+.pct-field .pct-biased { border-color: var(--clay); font-weight: bold; }
+
+/* A shelf line's "Seen by": everyone, or the players the DM ticked. Lines hidden from some are marked. */
+.seen-by > summary { padding: 0; min-height: 38px; max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 38px; }
+.seen-by-list { margin: 0; padding: 0 0 4px; border: 0; display: flex; flex-direction: column; }
+.seen-by-list .check { min-height: 32px; white-space: nowrap; }
+.stock-restricted .seen-by > summary { color: var(--clay-dark); font-weight: bold; }
+
 /* ---------- Tables ---------- */
 
 .table-wrap { overflow-x: auto; background: var(--paper); border: 2px solid var(--ink); border-radius: var(--wobble); }

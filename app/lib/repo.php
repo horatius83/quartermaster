@@ -488,22 +488,36 @@ function store(int $id): ?array
     return q_one('SELECT * FROM stores WHERE id = ? AND campaign_id = ?', [$id, campaign_id()]);
 }
 
-function store_stock_rows(int $storeId): array
+/**
+ * A store's shelf lines. For the DM (no $characterId), each has 'viewers': the ids of the characters who see it, or
+ * null for everyone. For a character, only the lines they see, at the prices they pay there.
+ */
+function store_stock_rows(int $storeId, ?int $characterId = null): array
 {
-    $sql = 'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight, i.description,
+    $sql = 'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, st.restricted, i.id AS item_id, i.name, i.weight, i.description,
                    cat.name AS category, cat.slug AS category_slug
               FROM store_stock st
               JOIN items i ON i.id = st.item_id
               JOIN categories cat ON cat.id = i.category_id
-             WHERE st.store_id = ?
+             WHERE st.store_id = ?' . ($characterId === null ? '' : ' AND ' . STOCK_SEEN_SQL) . '
              ORDER BY cat.sort_order, i.name, st.notes';
-    return q_all($sql, [$storeId]);
+    if ($characterId !== null) {
+        $pct = price_pct($storeId, $characterId);
+        return array_map(fn($r) => ['price_cp' => biased_price((int)$r['price_cp'], $pct)] + $r, q_all($sql, [$storeId, $characterId]));
+    }
+    $rows = q_all($sql, [$storeId]);
+    $viewers = [];
+    foreach (q_all('SELECT v.stock_id, v.character_id FROM stock_viewers v JOIN store_stock st ON st.id = v.stock_id WHERE st.store_id = ?', [$storeId]) as $v) {
+        $viewers[(int)$v['stock_id']][] = (int)$v['character_id'];
+    }
+    return array_map(fn($r) => $r + ['viewers' => (int)$r['restricted'] ? ($viewers[(int)$r['id']] ?? []) : null], $rows);
 }
 
+/** One shelf line in the current campaign, with 'viewers' as store_stock_rows() gives the DM. */
 function stock_row(int $id): ?array
 {
-    return q_one(
-        'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, i.id AS item_id, i.name, i.weight,
+    $row = q_one(
+        'SELECT st.id, st.store_id, st.notes, st.price_cp, st.quantity, st.restricted, i.id AS item_id, i.name, i.weight,
                 cat.name AS category, cat.slug AS category_slug
            FROM store_stock st
            JOIN items i ON i.id = st.item_id
@@ -512,6 +526,80 @@ function stock_row(int $id): ?array
           WHERE st.id = ? AND s.campaign_id = ?',
         [$id, campaign_id()]
     );
+    if ($row) {
+        $row['viewers'] = (int)$row['restricted']
+            ? array_map('intval', array_column(q_all('SELECT character_id FROM stock_viewers WHERE stock_id = ?', [$id]), 'character_id'))
+            : null;
+    }
+    return $row;
+}
+
+/** Whether the character (the one placeholder) sees the shelf line st: every line that isn't restricted, else only its viewers. */
+const STOCK_SEEN_SQL = '(st.restricted = 0 OR EXISTS (SELECT 1 FROM stock_viewers v WHERE v.stock_id = st.id AND v.character_id = ?))';
+
+/**
+ * One shelf line as a character sees it, at the price they pay; null if it's gone or they don't see it. With $lock
+ * (inside a transaction), the line stays as read until the transaction ends, so the DM can't hide it meanwhile.
+ */
+function stock_row_for(int $stockId, int $characterId, bool $lock = false): ?array
+{
+    $row = q_one(
+        'SELECT st.id, st.store_id, st.item_id, st.notes, st.price_cp, st.quantity, i.name
+           FROM store_stock st JOIN items i ON i.id = st.item_id
+          WHERE st.id = ? AND ' . STOCK_SEEN_SQL . ($lock ? for_update() : ''),
+        [$stockId, $characterId]
+    );
+    if ($row) {
+        $row['price_cp'] = biased_price((int)$row['price_cp'], price_pct((int)$row['store_id'], $characterId));
+    }
+    return $row;
+}
+
+/** The most a DM can charge a character, as a share of a store's prices. */
+const MAX_PRICE_PCT = 1000;
+
+/** The share of a store's prices a character pays there, in percent (100 unless the DM set another). */
+function price_pct(int $storeId, int $characterId): int
+{
+    return (int)(q_val('SELECT price_pct FROM store_prices WHERE store_id = ? AND character_id = ?', [$storeId, $characterId]) ?? 100);
+}
+
+/** Each character's share of a store's prices, for those not paying 100%: [character id => percent]. */
+function store_price_pcts(int $storeId): array
+{
+    $pcts = [];
+    foreach (q_all('SELECT character_id, price_pct FROM store_prices WHERE store_id = ?', [$storeId]) as $r) {
+        $pcts[(int)$r['character_id']] = (int)$r['price_pct'];
+    }
+    return $pcts;
+}
+
+/** A price at $pct percent, to the nearest copper (half a copper rounds up). */
+function biased_price(int $cp, int $pct): int
+{
+    return $pct === 100 ? $cp : min(PRICE_CP_LIMIT, intdiv($cp * $pct + 50, 100));
+}
+
+/** The most a price column (a signed INT in MySQL) holds, in copper: some 21 million gp. */
+const PRICE_CP_LIMIT = 2147483647;
+
+/**
+ * Bring the prices in a character's open cart at a store up to date with the shelf and what they pay there, so a
+ * change to their share of the prices shows straight away. Carts sent to the DM keep the prices they were sent at.
+ */
+function reprice_open_cart(int $storeId, int $characterId): void
+{
+    $pct = price_pct($storeId, $characterId);
+    $lines = q_all(
+        "SELECT ci.id, st.price_cp FROM cart_items ci
+           JOIN carts c ON c.id = ci.cart_id
+           JOIN store_stock st ON st.store_id = c.store_id AND st.item_id = ci.item_id AND st.notes = ci.notes
+          WHERE c.store_id = ? AND c.character_id = ? AND c.status = 'open'",
+        [$storeId, $characterId]
+    );
+    foreach ($lines as $l) {
+        q('UPDATE cart_items SET unit_price_cp = ? WHERE id = ?', [biased_price((int)$l['price_cp'], $pct), $l['id']]);
+    }
 }
 
 /**
@@ -634,10 +722,48 @@ function remove_from_open_carts(int $storeId, int $itemId, string $notes): int
     )->rowCount();
 }
 
-/** Character ids allowed in a store; empty array = everyone. */
-function store_access_ids(int $storeId): array
+/** Take a shelf line out of the open carts of characters who no longer see it. Returns how many lines went. */
+function remove_unseen_from_open_carts(int $stockId): int
 {
-    return array_map('intval', array_column(q_all('SELECT character_id FROM store_access WHERE store_id = ?', [$storeId]), 'character_id'));
+    // MySQL won't delete from a table its subquery reads, except through a derived table like this one.
+    return q(
+        "DELETE FROM cart_items WHERE id IN (SELECT id FROM (
+           SELECT ci.id FROM cart_items ci
+             JOIN carts c ON c.id = ci.cart_id
+             JOIN store_stock st ON st.store_id = c.store_id AND st.item_id = ci.item_id AND st.notes = ci.notes
+            WHERE st.id = ? AND c.status = 'open' AND st.restricted = 1
+              AND NOT EXISTS (SELECT 1 FROM stock_viewers v WHERE v.stock_id = st.id AND v.character_id = c.character_id)
+         ) unseen)",
+        [$stockId]
+    )->rowCount();
+}
+
+/**
+ * Take out of an open cart the lines no longer for sale to its character: pulled from the shelf, or hidden from them,
+ * while the cart was with the DM. Open carts lose those as it happens. Returns how many lines went.
+ */
+function remove_unsold_from_cart(int $cartId): int
+{
+    return q(
+        "DELETE FROM cart_items WHERE id IN (SELECT id FROM (
+           SELECT ci.id FROM cart_items ci
+             JOIN carts c ON c.id = ci.cart_id
+             LEFT JOIN store_stock st ON st.store_id = c.store_id AND st.item_id = ci.item_id AND st.notes = ci.notes
+            WHERE c.id = ? AND c.status = 'open'
+              AND (st.id IS NULL OR (st.restricted = 1
+                   AND NOT EXISTS (SELECT 1 FROM stock_viewers v WHERE v.stock_id = st.id AND v.character_id = c.character_id)))
+         ) unsold)",
+        [$cartId]
+    )->rowCount();
+}
+
+/** Character ids allowed in a store, or null for everyone (characters who join later too). An empty array is nobody. */
+function store_access_ids(array $store): ?array
+{
+    if (!(int)$store['restricted']) {
+        return null;
+    }
+    return array_map('intval', array_column(q_all('SELECT character_id FROM store_access WHERE store_id = ?', [$store['id']]), 'character_id'));
 }
 
 /** Open stores this character may shop in. */
@@ -647,7 +773,7 @@ function stores_for_character(int $characterId): array
         'SELECT s.* FROM stores s
           WHERE s.is_open = 1
             AND s.campaign_id = (SELECT campaign_id FROM characters WHERE id = ?)
-            AND (NOT EXISTS (SELECT 1 FROM store_access a WHERE a.store_id = s.id)
+            AND (s.restricted = 0
                  OR EXISTS (SELECT 1 FROM store_access a WHERE a.store_id = s.id AND a.character_id = ?))
           ORDER BY s.name',
         [$characterId, $characterId]

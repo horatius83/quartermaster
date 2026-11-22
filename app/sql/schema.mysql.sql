@@ -116,12 +116,13 @@ CREATE TABLE stores (
   kind        VARCHAR(100) NOT NULL DEFAULT '',
   blurb       VARCHAR(1000) NOT NULL DEFAULT '',
   is_open     TINYINT(1) NOT NULL DEFAULT 0,
+  restricted  TINYINT(1) NOT NULL DEFAULT 0,
   created_at  DATETIME NOT NULL,
   KEY ix_stores_campaign (campaign_id),
   CONSTRAINT fk_stores_campaign FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- No rows for a store = every character may shop there.
+-- Who may shop in a store with restricted = 1 (none of its rows: nobody). Every character may shop in the others.
 CREATE TABLE store_access (
   store_id     INT UNSIGNED NOT NULL,
   character_id INT UNSIGNED NOT NULL,
@@ -130,19 +131,39 @@ CREATE TABLE store_access (
   CONSTRAINT fk_access_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- What share of a store's prices a character pays, where it isn't 100% (120 = a fifth more, 90 = a tenth off).
+CREATE TABLE store_prices (
+  store_id     INT UNSIGNED NOT NULL,
+  character_id INT UNSIGNED NOT NULL,
+  price_pct    INT NOT NULL DEFAULT 100,
+  PRIMARY KEY (store_id, character_id),
+  CONSTRAINT fk_price_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+  CONSTRAINT fk_price_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- A shelf line. The same item can be stocked more than once with different notes ("Spell: Magic Missile"),
 -- which go with it into carts and packs. Notes match exactly, as in SQLite, and are short enough for the unique key
 -- to fit older MySQL's 767-byte limit on an indexed column. quantity NULL = unlimited stock.
+-- With restricted = 1 only the characters in stock_viewers see it.
 CREATE TABLE store_stock (
-  id       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  store_id INT UNSIGNED NOT NULL,
-  item_id  INT UNSIGNED NOT NULL,
-  notes    VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
-  price_cp INT NOT NULL DEFAULT 0,
-  quantity INT NULL,
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  store_id   INT UNSIGNED NOT NULL,
+  item_id    INT UNSIGNED NOT NULL,
+  notes      VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+  price_cp   INT NOT NULL DEFAULT 0,
+  quantity   INT NULL,
+  restricted TINYINT(1) NOT NULL DEFAULT 0,
   UNIQUE KEY uq_stock_store_item_notes (store_id, item_id, notes),
   CONSTRAINT fk_stock_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
   CONSTRAINT fk_stock_item FOREIGN KEY (item_id) REFERENCES items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE stock_viewers (
+  stock_id     INT UNSIGNED NOT NULL,
+  character_id INT UNSIGNED NOT NULL,
+  PRIMARY KEY (stock_id, character_id),
+  CONSTRAINT fk_viewer_stock FOREIGN KEY (stock_id) REFERENCES store_stock(id) ON DELETE CASCADE,
+  CONSTRAINT fk_viewer_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE carts (
@@ -155,6 +176,8 @@ CREATE TABLE carts (
   created_at   DATETIME NOT NULL,
   submitted_at DATETIME NULL,
   decided_at   DATETIME NULL,
+  -- The share of the store's prices the character paid when they sent it (see store_prices).
+  price_pct    INT NOT NULL DEFAULT 100,
   KEY ix_carts_status (status),
   KEY ix_carts_character_store (character_id, store_id),
   CONSTRAINT fk_carts_character FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,

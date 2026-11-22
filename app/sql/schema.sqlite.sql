@@ -98,25 +98,42 @@ CREATE TABLE stores (
   kind       TEXT NOT NULL DEFAULT '',
   blurb      TEXT NOT NULL DEFAULT '',
   is_open    INTEGER NOT NULL DEFAULT 0,
+  restricted INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
+-- Who may shop in a store with restricted = 1 (none of its rows: nobody). Every character may shop in the others.
 CREATE TABLE store_access (
   store_id     INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
   character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   PRIMARY KEY (store_id, character_id)
 );
 
+-- What share of a store's prices a character pays, where it isn't 100% (120 = a fifth more, 90 = a tenth off).
+CREATE TABLE store_prices (
+  store_id     INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  price_pct    INTEGER NOT NULL DEFAULT 100,
+  PRIMARY KEY (store_id, character_id)
+);
+
 -- A shelf line. The same item can be stocked more than once with different notes ("Spell: Magic Missile"),
--- which go with it into carts and packs.
+-- which go with it into carts and packs. With restricted = 1 only the characters in stock_viewers see it.
 CREATE TABLE store_stock (
-  id       INTEGER PRIMARY KEY AUTOINCREMENT,
-  store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
-  item_id  INTEGER NOT NULL REFERENCES items(id),
-  notes    TEXT NOT NULL DEFAULT '',
-  price_cp INTEGER NOT NULL DEFAULT 0,
-  quantity INTEGER NULL,
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  store_id   INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+  item_id    INTEGER NOT NULL REFERENCES items(id),
+  notes      TEXT NOT NULL DEFAULT '',
+  price_cp   INTEGER NOT NULL DEFAULT 0,
+  quantity   INTEGER NULL,
+  restricted INTEGER NOT NULL DEFAULT 0,
   UNIQUE (store_id, item_id, notes)
+);
+
+CREATE TABLE stock_viewers (
+  stock_id     INTEGER NOT NULL REFERENCES store_stock(id) ON DELETE CASCADE,
+  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  PRIMARY KEY (stock_id, character_id)
 );
 
 CREATE TABLE carts (
@@ -128,7 +145,9 @@ CREATE TABLE carts (
   dm_note      TEXT NOT NULL DEFAULT '',
   created_at   TEXT NOT NULL,
   submitted_at TEXT NULL,
-  decided_at   TEXT NULL
+  decided_at   TEXT NULL,
+  -- The share of the store's prices the character paid when they sent it (see store_prices).
+  price_pct    INTEGER NOT NULL DEFAULT 100
 );
 
 CREATE TABLE cart_items (
