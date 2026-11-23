@@ -47,26 +47,23 @@
       <div class="actions">
         <button class="btn btn-dark" type="submit">Save details</button>
         <button class="link-btn danger" type="button" hx-post="<?= e(url('/dm/stores/' . $store['id'] . '/delete')) ?>"
-          hx-confirm="Close <?= e($store['name']) ?> for good? Its shelves and any carts here will be removed.<?php
-            // Receipts from a campaign it moved out of go too, though that campaign's DM pages don't show this store.
-            foreach ($receiptsElsewhere as $r): ?> So will <?= (int)$r['carts'] ?> <?= (int)$r['carts'] === 1 ? 'receipt' : 'receipts' ?> from <?= e($r['name']) ?>, from before it moved.<?php endforeach; ?>">Delete store</button>
+          hx-confirm="Close <?= e($store['name']) ?> for good? Its shelves and any carts here will be removed.">Delete store</button>
       </div>
     </form>
 
     <?php if ($elsewhere): ?>
-      <?php // Same system: the store goes, shelves and all. Another system: that campaign gets an empty namesake and this one stays (see dm_store_move). ?>
-      <form class="card card-dashed form-row" method="post" action="<?= e(url('/dm/stores/' . $store['id'] . '/move')) ?>"
-            hx-confirm="Move <?= e($store['name']) ?> to the campaign you picked?">
+      <?php // Same system: the copy gets these shelves too. Another system: it gets the name, kind and note only (see dm_store_copy). ?>
+      <form class="card card-dashed form-row" method="post" action="<?= e(url('/dm/stores/' . $store['id'] . '/copy')) ?>">
         <?= csrf_field() ?>
-        <label class="field mid">Move to campaign
+        <label class="field mid">Copy to campaign
           <select name="campaign_id">
             <?php foreach ($elsewhere as $c): ?>
-              <option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?> (<?= e(ruleset_label($c['ruleset'])) ?><?= $c['ruleset'] === campaign_ruleset() ? ', shelves go too' : ', empty store only' ?>)</option>
+              <option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?> (<?= e(ruleset_label($c['ruleset'])) ?><?= $c['ruleset'] === campaign_ruleset() ? ', shelves too' : ', empty shelves' ?>)</option>
             <?php endforeach; ?>
           </select>
         </label>
-        <p class="small muted grow" style="margin:0">A campaign playing <?= e(ruleset_label(campaign_ruleset())) ?> takes the store with its shelves, hidden until you open it there; carts not yet sent are emptied. A campaign playing another system gets an empty store with the same name instead, and this one stays.</p>
-        <button class="btn btn-ghost" type="submit">Move store</button>
+        <p class="small muted grow" style="margin:0">This store stays as it is. The copy starts hidden. A campaign playing <?= e(ruleset_label(campaign_ruleset())) ?> gets these shelves too, with the same prices and stock; one playing another system gets the name, kind and note with empty shelves.</p>
+        <button class="btn btn-ghost" type="submit">Copy store</button>
       </form>
     <?php endif; ?>
 

@@ -39,8 +39,7 @@ function dm_store(int $storeId): void
         'stock'      => store_stock_rows($storeId),
         'characters' => party_names(),
         'access'     => store_access_ids($storeId),
-        // The DM's other campaigns, which the store can move to.
-        'receiptsElsewhere' => store_receipts_elsewhere($storeId),
+        // The DM's other campaigns, which the store can be copied to.
         'elsewhere'  => q_all('SELECT id, name, ruleset FROM campaigns WHERE owner_user_id = ? AND id <> ? ORDER BY name, id', [owner_id(), campaign_id()]),
     ], $store['name']);
 }
@@ -82,22 +81,6 @@ function dm_store_toggle(int $storeId): void
     fragment('partials/store_switch', ['store' => $store]);
 }
 
-/**
- * Carts already approved or declined at a store by characters in other campaigns, counted by campaign: those from
- * before it moved here (see dm_store_move). Deleting the store deletes them too, so its delete button says so.
- */
-function store_receipts_elsewhere(int $storeId): array
-{
-    return q_all(
-        "SELECT cp.name, COUNT(*) AS carts FROM carts c
-           JOIN characters ch ON ch.id = c.character_id
-           JOIN campaigns cp ON cp.id = ch.campaign_id
-          WHERE c.store_id = ? AND c.status IN ('approved','declined') AND ch.campaign_id <> ?
-          GROUP BY cp.id, cp.name ORDER BY cp.name",
-        [$storeId, campaign_id()]
-    );
-}
-
 function dm_store_delete(int $storeId): void
 {
     require_dm();
@@ -108,29 +91,30 @@ function dm_store_delete(int $storeId): void
 }
 
 /**
- * Move a store to another of this DM's campaigns. A campaign playing the same system takes it as it is, shelves and
- * all. Its open carts and its list of who can shop there are this party's, so they stay behind (the carts are emptied),
- * and it arrives hidden, so the DM can say who shops there before opening it. Carts already decided stay in this
- * campaign's history. A campaign playing another system can't use these items, so it gets an empty, hidden store with
- * the same name, kind and note instead, and this one stays where it is.
+ * Copy a store into another of this DM's campaigns; this one stays as it is. A campaign playing the same system gets
+ * its shelves too, with the same prices and stock counts. One playing another system can't use these items, so it gets
+ * the store's name, kind and note with empty shelves. Either way the copy starts hidden, open to that whole party,
+ * for the DM to say who shops there before opening it. Carts and who can shop here belong to this party, so they
+ * aren't copied.
  */
-function dm_store_move(int $storeId): void
+function dm_store_copy(int $storeId): void
 {
     require_dm();
     $store = store($storeId) ?? abort(404, 'No such store.');
     $target = campaign(post_int('campaign_id'));
     if (!$target || (int)$target['id'] === campaign_id()) {
-        flash('Pick another of your campaigns to move the store to.', 'error');
+        flash('Pick another of your campaigns to copy the store to.', 'error');
         redirect('/dm/stores/' . $storeId);
     }
     $fromId = campaign_id();
     $toId = (int)$target['id'];
 
     try {
-        [$target, $sameSystem, $emptied] = transaction(function () use ($store, $fromId, $toId) {
-            // Both campaign rows, lower id first, so neither can be deleted or have its system set under the move, and
-            // two moves the opposite way can't deadlock. The systems are compared from these rows, not the ones read
-            // before, since setting a campaign's system (dm_campaign_set_ruleset) locks the same row.
+        [$target, $sameSystem, $lines] = transaction(function () use ($store, $fromId, $toId) {
+            // Both campaign rows, lower id first, so neither can be deleted or have its system set under the copy, and
+            // two copies the opposite way can't deadlock. The systems are compared from these rows, not the ones read
+            // before, since setting a campaign's system (dm_campaign_set_ruleset) locks the same row and changes the
+            // items on its shelves.
             $locked = [];
             foreach ([min($fromId, $toId), max($fromId, $toId)] as $id) {
                 $row = lock_campaign($id);
@@ -141,26 +125,20 @@ function dm_store_move(int $storeId): void
             }
             $target = $locked[$toId];
             $sameSystem = $target['ruleset'] === $locked[$fromId]['ruleset'];
-            $live = q_one('SELECT * FROM stores WHERE id = ? AND campaign_id = ?' . for_update(), [$store['id'], $fromId]);
+            $live = q_one('SELECT * FROM stores WHERE id = ? AND campaign_id = ?', [$store['id'], $fromId]);
             if (!$live) {
-                throw new RuntimeException("{$store['name']} has already moved or closed.");
+                throw new RuntimeException("{$store['name']} has closed.");
             }
-            if (!$sameSystem) {
-                insert(
-                    'INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 0, ?)',
-                    [$toId, $live['name'], $live['kind'], $live['blurb'], now()]
-                );
-                return [$target, false, 0];
-            }
-            // Lock the store's live carts, so none is sent to the DM while this decides.
-            $carts = q_all("SELECT status FROM carts WHERE store_id = ? AND status IN ('open','submitted')" . for_update(), [$store['id']]);
-            if (in_array('submitted', array_column($carts, 'status'), true)) {
-                throw new RuntimeException("A cart at {$store['name']} is waiting on you. Approve or decline it before moving the store.");
-            }
-            $emptied = q("DELETE FROM carts WHERE store_id = ? AND status = 'open'", [$store['id']])->rowCount();
-            q('DELETE FROM store_access WHERE store_id = ?', [$store['id']]);
-            q('UPDATE stores SET campaign_id = ?, is_open = 0 WHERE id = ?', [$toId, $store['id']]);
-            return [$target, true, $emptied];
+            $copyId = insert(
+                'INSERT INTO stores (campaign_id, name, kind, blurb, is_open, created_at) VALUES (?, ?, ?, ?, 0, ?)',
+                [$toId, $live['name'], $live['kind'], $live['blurb'], now()]
+            );
+            $lines = !$sameSystem ? 0 : q(
+                'INSERT INTO store_stock (store_id, item_id, notes, price_cp, quantity)
+                 SELECT ?, item_id, notes, price_cp, quantity FROM store_stock WHERE store_id = ?',
+                [$copyId, $store['id']]
+            )->rowCount();
+            return [$target, $sameSystem, $lines];
         });
     } catch (PDOException $e) {
         throw $e;
@@ -169,14 +147,11 @@ function dm_store_move(int $storeId): void
         redirect(store($storeId) ? '/dm/stores/' . $storeId : '/dm/stores');
     }
 
-    if (!$sameSystem) {
-        flash("{$target['name']} plays " . ruleset_label($target['ruleset']) . ', so these shelves can’t go there. '
-            . "It has an empty {$store['name']} of its own now, hidden until you stock and open it. This one stays here.");
-        redirect('/dm/stores/' . $storeId);
-    }
-    flash("{$store['name']} moved to {$target['name']}, shelves and all. It’s hidden there until you open it."
-        . ($emptied ? ' ' . ($emptied === 1 ? 'An open cart' : "{$emptied} open carts") . ' here ' . ($emptied === 1 ? 'was' : 'were') . ' emptied.' : ''));
-    redirect('/dm/stores');
+    flash($sameSystem
+        ? "Copied {$store['name']} to {$target['name']}" . ($lines ? ', shelves and all' : '') . '. It’s hidden there until you open it.'
+        : "{$target['name']} plays " . ruleset_label($target['ruleset']) . ', so these shelves can’t go there. '
+            . "It has an empty {$store['name']} of its own now, hidden until you stock and open it.");
+    redirect('/dm/stores/' . $storeId);
 }
 
 function dm_stock_add(int $storeId): void
