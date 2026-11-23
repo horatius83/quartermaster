@@ -77,6 +77,7 @@ $routes = [
     ['POST', '/dm/stores/{id}/stock',      'dm_stock_add'],
     ['GET',  '/dm/stock/spells',           'dm_stock_spells'],
     ['POST', '/dm/stock/{id}',             'dm_stock_update'],
+    ['POST', '/dm/stock/{id}/viewers',     'dm_stock_viewers'],
     ['POST', '/dm/stock/{id}/delete',      'dm_stock_delete'],
 
     // DM: catalog

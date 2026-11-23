@@ -9,6 +9,10 @@ $when = $pending ? 'sent ' . time_ago($cart['submitted_at']) : strtolower($label
     <div>
       <h3 class="card-title" style="font-size:34px"><?= e($cart['character_name']) ?></h3>
       <div class="muted small">at <?= e($cart['store_name']) ?> · <?= e($when) ?></div>
+      <?php // The share its prices were sent at, which the DM may have changed since (it doesn't change the cart). ?>
+      <?php if ($cart['status'] !== 'open' && (int)$cart['price_pct'] !== 100): ?>
+        <div class="small" style="color:var(--clay-dark)">Sent at <?= (int)$cart['price_pct'] ?>% of shelf prices</div>
+      <?php endif; ?>
     </div>
     <span class="status status-<?= e($cart['status']) ?>"><?= e($labels[$cart['status']]) ?></span>
   </div>

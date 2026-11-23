@@ -57,7 +57,8 @@ function shop(int $storeId): void
     $cat = get_str('cat', 30);
     $tags = filter_tags($_GET);
 
-    $stock = with_item_tags(store_stock_rows($storeId), 'item_id');
+    // Only the lines this character sees, at what they pay here.
+    $stock = with_item_tags(store_stock_rows($storeId, (int)$char['id']), 'item_id');
     $inCategory = $cat === '' ? $stock : array_filter($stock, fn($w) => $w['category_slug'] === $cat);
     $shown = having_tags($inCategory, $tags);
 
@@ -93,28 +94,40 @@ function shop_add(int $storeId): void
 {
     $char = require_player();
     $store = player_store($char, $storeId);
-    $stock = stock_row(post_int('stock_id')) ?? htmx_fail('That item is no longer for sale.');
-    if ((int)$stock['store_id'] !== $storeId) {
-        htmx_fail('That item is not sold here.');
-    }
-    $cart = active_cart((int)$char['id'], $storeId, true);
-    if ($cart['status'] === 'submitted') {
-        htmx_fail('Your cart is with the DM. Withdraw it to make changes.');
-    }
-    $label = named_with_notes($stock['name'], $stock['notes']);
-    $line = q_one('SELECT * FROM cart_items WHERE cart_id = ? AND item_id = ? AND notes = ?', [$cart['id'], $stock['item_id'], $stock['notes']]);
-    $newQty = ($line ? (int)$line['quantity'] : 0) + 1;
-    if ($stock['quantity'] !== null && $newQty > (int)$stock['quantity']) {
-        htmx_fail("Only {$stock['quantity']} × {$label} in stock.");
-    }
-    if ($line) {
-        // At today's shelf price, which also ends any price the DM haggled for the lot they saw.
-        q('UPDATE cart_items SET quantity = ?, unit_price_cp = ?, list_price_cp = NULL WHERE id = ?', [$newQty, $stock['price_cp'], $line['id']]);
-    } else {
-        q(
-            'INSERT INTO cart_items (cart_id, item_id, notes, quantity, unit_price_cp) VALUES (?, ?, ?, 1, ?)',
-            [$cart['id'], $stock['item_id'], $stock['notes'], $stock['price_cp']]
-        );
+    try {
+        // With the shelf line locked from the check to the add, so the DM can't hide it from this character between them.
+        $label = transaction(function () use ($char, $storeId) {
+            // At the price this character pays here; a line hidden from them is as good as gone.
+            $stock = stock_row_for(post_int('stock_id'), (int)$char['id'], lock: true)
+                ?? throw new RuntimeException('That item is no longer for sale.');
+            if ((int)$stock['store_id'] !== $storeId) {
+                throw new RuntimeException('That item is not sold here.');
+            }
+            $cart = active_cart((int)$char['id'], $storeId, true);
+            if ($cart['status'] === 'submitted') {
+                throw new RuntimeException('Your cart is with the DM. Withdraw it to make changes.');
+            }
+            $label = named_with_notes($stock['name'], $stock['notes']);
+            $line = q_one('SELECT * FROM cart_items WHERE cart_id = ? AND item_id = ? AND notes = ?', [$cart['id'], $stock['item_id'], $stock['notes']]);
+            $newQty = ($line ? (int)$line['quantity'] : 0) + 1;
+            if ($stock['quantity'] !== null && $newQty > (int)$stock['quantity']) {
+                throw new RuntimeException("Only {$stock['quantity']} × {$label} in stock.");
+            }
+            if ($line) {
+                // At today's price, which also ends any price the DM haggled for the lot they saw.
+                q('UPDATE cart_items SET quantity = ?, unit_price_cp = ?, list_price_cp = NULL WHERE id = ?', [$newQty, $stock['price_cp'], $line['id']]);
+            } else {
+                q(
+                    'INSERT INTO cart_items (cart_id, item_id, notes, quantity, unit_price_cp) VALUES (?, ?, ?, 1, ?)',
+                    [$cart['id'], $stock['item_id'], $stock['notes'], $stock['price_cp']]
+                );
+            }
+            return $label;
+        });
+    } catch (PDOException $e) {
+        throw $e; // A database fault, not a refusal to show (it's a RuntimeException too).
+    } catch (RuntimeException $e) {
+        htmx_fail($e->getMessage());
     }
     toast("Added {$label} to your cart.");
     cart_panel($char, $store);
@@ -138,10 +151,14 @@ function shop_line_qty(int $lineId): void
     if ($newQty <= 0) {
         q('DELETE FROM cart_items WHERE id = ?', [$lineId]);
     } else {
+        // Only lines still on the shelf for this character can grow (a cart back from the DM may hold others).
         $stock = q_one(
-            'SELECT quantity FROM store_stock WHERE store_id = ? AND item_id = ? AND notes = ?',
-            [$line['store_id'], $line['item_id'], $line['notes']]
+            'SELECT st.quantity FROM store_stock st WHERE st.store_id = ? AND st.item_id = ? AND st.notes = ? AND ' . STOCK_SEEN_SQL,
+            [$line['store_id'], $line['item_id'], $line['notes'], $char['id']]
         );
+        if (!$stock && $newQty > (int)$line['quantity']) {
+            htmx_fail('That item is no longer for sale.');
+        }
         if ($stock && $stock['quantity'] !== null && $newQty > (int)$stock['quantity']) {
             htmx_fail("Only {$stock['quantity']} in stock.");
         }
@@ -159,9 +176,12 @@ function shop_submit(int $storeId): void
     if (!$cart || $cart['status'] !== 'open' || !cart_detail((int)$cart['id'])['lines']) {
         htmx_fail('Add something to your cart first.');
     }
+    // With the share of the prices the character pays here, which its lines are at, for the DM to see.
     q(
-        "UPDATE carts SET status = 'submitted', player_note = ?, submitted_at = ? WHERE id = ?",
-        [post_str('player_note', 500), now(), $cart['id']]
+        "UPDATE carts SET status = 'submitted', player_note = ?, submitted_at = ?,
+                price_pct = COALESCE((SELECT p.price_pct FROM store_prices p WHERE p.store_id = ? AND p.character_id = ?), 100)
+          WHERE id = ?",
+        [post_str('player_note', 500), now(), $storeId, $char['id'], $cart['id']]
     );
     toast('Sent to your DM. Coin is only spent once they approve.');
     cart_panel($char, $store);
@@ -175,8 +195,27 @@ function shop_withdraw(int $storeId): void
     if (!$cart || $cart['status'] !== 'submitted') {
         htmx_fail('There is nothing waiting on the DM.');
     }
-    q("UPDATE carts SET status = 'open', submitted_at = NULL WHERE id = ?", [$cart['id']]);
-    toast('Cart withdrawn. You can change it now.');
+    $cartId = (int)$cart['id'];
+    $charId = (int)$char['id'];
+    [$gone, $repriced] = transaction(function () use ($cartId, $charId, $storeId, $cart) {
+        if (!q("UPDATE carts SET status = 'open', submitted_at = NULL WHERE id = ? AND status = 'submitted'", [$cartId])->rowCount()) {
+            return [null, false]; // The DM got to it first.
+        }
+        // While it was with the DM, they may have pulled or hidden things in it, or changed what this character pays
+        // here. It comes back as an open cart would be now.
+        $gone = remove_unsold_from_cart($cartId);
+        $repriced = (int)$cart['price_pct'] !== price_pct($storeId, $charId);
+        if ($repriced) {
+            reprice_open_cart($storeId, $charId);
+        }
+        return [$gone, $repriced];
+    });
+    if ($gone === null) {
+        htmx_fail('There is nothing waiting on the DM.');
+    }
+    toast('Cart withdrawn. You can change it now.'
+        . ($gone ? ' ' . ($gone === 1 ? 'One thing in it is no longer for sale, so it was' : "{$gone} things in it are no longer for sale, so they were") . ' taken out.' : '')
+        . ($repriced ? ' Its prices have changed since you sent it.' : ''));
     cart_panel($char, $store);
 }
 

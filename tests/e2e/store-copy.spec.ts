@@ -53,7 +53,7 @@ test('a campaign of the same system gets a copy with the shelves, and the store 
   await expect(details(page).getByLabel('Kind of shop')).toHaveValue('Smithy');
   const row = page.locator('#stock-body tr', { hasText: 'Chain mail' });
   await expect(row.locator('input[name="quantity"]')).toHaveValue('1');
-  await expect(page.getByRole('checkbox', { name: 'Sela Morrow' })).toBeChecked();
+  await expect(page.getByRole('group', { name: 'Who can shop here' }).getByRole('checkbox', { name: 'Sela Morrow' })).toBeChecked();
   // No cart came along.
   await page.goto('/dm/carts');
   await expect(page.locator('article', { hasText: 'Bryn Ashvale' })).toHaveCount(0);

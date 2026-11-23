@@ -53,6 +53,7 @@ const UPGRADES = [
     '010-requests'      => 'SELECT 1 FROM requests LIMIT 1',
     '011-party-purse'   => 'SELECT 1 FROM party_items LIMIT 1',
     '012-haggled-prices' => 'SELECT list_price_cp FROM cart_items LIMIT 1',
+    '013-store-bias'    => 'SELECT 1 FROM store_prices LIMIT 1',
 ];
 
 /**

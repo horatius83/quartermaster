@@ -36,10 +36,21 @@
         <label class="field grow">Shopkeeper’s note to players
           <textarea name="blurb" rows="2" maxlength="1000"><?= e($store['blurb']) ?></textarea>
         </label>
-        <fieldset class="box mid">
+        <?php // Each character's share of the shelf prices: 100% is the price on the shelf, 120% a fifth more, 90% a tenth off. Players only see what they pay. ?>
+        <fieldset class="box mid shop-access">
           <legend>Who can shop here</legend>
-          <?php foreach ($characters as $c): ?>
-            <label class="check"><input type="checkbox" name="access[]" value="<?= (int)$c['id'] ?>"<?= (!$access || in_array((int)$c['id'], $access, true)) ? ' checked' : '' ?>> <?= e($c['name']) ?></label>
+          <?php if ($characters): ?><div class="pct-hint muted small" aria-hidden="true">pays, % of shelf price</div><?php endif; ?>
+          <?php foreach ($characters as $c): $cid = (int)$c['id']; ?>
+            <div class="access-row">
+              <?php // Names shown, so a character who joins while this page is open keeps their place (see posted_party_choice()). ?>
+              <input type="hidden" name="access_shown[]" value="<?= $cid ?>">
+              <label class="check"><input type="checkbox" name="access[]" value="<?= $cid ?>"<?= ($access === null || in_array($cid, $access, true)) ? ' checked' : '' ?>> <?= e($c['name']) ?></label>
+              <span class="pct-field">
+                <label class="visually-hidden" for="pct-<?= $cid ?>">Prices for <?= e($c['name']) ?>, as a percentage</label>
+                <input class="input-sm<?= ($pcts[$cid] ?? 100) !== 100 ? ' pct-biased' : '' ?>" style="width:72px" id="pct-<?= $cid ?>" name="pct[<?= $cid ?>]"
+                  type="number" min="0" max="<?= MAX_PRICE_PCT ?>" step="1" inputmode="numeric" value="<?= (int)($pcts[$cid] ?? 100) ?>">%
+              </span>
+            </div>
           <?php endforeach; ?>
           <?php if (!$characters): ?><span class="muted small">No characters yet.</span><?php endif; ?>
         </fieldset>
@@ -99,8 +110,8 @@
     <div class="table-wrap">
       <table class="ledger">
         <caption>On the shelves</caption>
-        <thead><tr><th>Item</th><th>Category</th><th>Price</th><th>In stock <span class="small">(blank = ∞)</span></th><th class="right">Actions</th></tr></thead>
-        <?= render('partials/stock_body', ['stock' => $stock]) ?>
+        <thead><tr><th>Item</th><th>Category</th><th>Price</th><th>In stock <span class="small">(blank = ∞)</span></th><th>Seen by</th><th class="right">Actions</th></tr></thead>
+        <?= render('partials/stock_body', ['stock' => $stock, 'party' => $characters]) ?>
       </table>
     </div>
   </section>
