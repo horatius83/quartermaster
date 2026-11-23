@@ -1,4 +1,4 @@
-import { test, expect, signIn, signInAsDm, toasts, type Page } from './fixtures';
+import { test, expect, signIn, signInAsDm, toasts, SECOND_CAMPAIGN, type Page } from './fixtures';
 
 // The Rusty Anvil sells longswords at 15 gp, shields at 10 gp and battleaxes at 10 gp (scripts/seed-demo.php).
 async function openAnvil(page: Page): Promise<void> {
@@ -149,6 +149,39 @@ test('a price the DM haggled stays when the player’s share changes', async ({ 
   await expect(cart.locator('.cart-line', { hasText: 'Longsword' })).toContainText('12 gp each · shelf price 15 gp');
   await page.getByRole('button', { name: 'Add Shield to cart' }).click();
   await expect(cart.locator('.price-lg')).toHaveText('27 gp');
+});
+
+test('a store copied to another campaign starts open to that party, at 100%, with every line seen', async ({ page }) => {
+  // The Anvil here is for Bryn alone, at 120%, and its battleaxe is hidden from him.
+  await openAnvil(page);
+  const access = page.getByRole('group', { name: 'Who can shop here' });
+  for (const name of ['Tamsin Reed', 'Oskar Vell', 'Wren Holloway']) {
+    await access.getByRole('checkbox', { name }).uncheck();
+  }
+  await page.getByLabel('Prices for Bryn Ashvale, as a percentage').fill('120');
+  await page.getByRole('button', { name: 'Save details' }).click();
+  await expect(page.getByText('Store details saved.')).toBeVisible();
+  await page.getByLabel(/^Who sees Battleaxe:/).click();
+  await page.locator('#stock-body tr', { hasText: 'Battleaxe' }).getByRole('checkbox', { name: 'Bryn Ashvale' }).uncheck();
+  await expect(page.getByLabel(/^Who sees Battleaxe:/)).toHaveText('Oskar Vell, Tamsin Reed, Wren Holloway');
+
+  await page.getByLabel('Copy to campaign').selectOption({ label: `${SECOND_CAMPAIGN} (5e, shelves too)` });
+  await page.getByRole('button', { name: 'Copy store' }).click();
+  await expect(toasts(page)).toContainText(`Copied The Rusty Anvil to ${SECOND_CAMPAIGN}, shelves and all.`);
+  // The original keeps all of it.
+  await expect(access.getByRole('checkbox', { name: 'Tamsin Reed' })).not.toBeChecked();
+  await expect(page.getByLabel('Prices for Bryn Ashvale, as a percentage')).toHaveValue('120');
+  await expect(page.getByLabel(/^Who sees Battleaxe:/)).toHaveText('Oskar Vell, Tamsin Reed, Wren Holloway');
+
+  await page.goto('/dm');
+  await page.getByLabel('Campaign', { exact: true }).selectOption({ label: SECOND_CAMPAIGN });
+  await expect(toasts(page)).toContainText(`Now running ${SECOND_CAMPAIGN}.`);
+  await page.goto('/dm/stores');
+  await page.getByRole('navigation', { name: 'Stores' }).getByRole('link', { name: /The Rusty Anvil/ }).click();
+  await expect(page.locator('#store-h')).toHaveText('The Rusty Anvil');
+  await expect(access.getByRole('checkbox', { name: 'Sela Morrow' })).toBeChecked();
+  await expect(page.getByLabel('Prices for Sela Morrow, as a percentage')).toHaveValue('100');
+  await expect(page.getByLabel(/^Who sees Battleaxe:/)).toHaveText('Everyone');
 });
 
 test('a page drawn before a character joined leaves that character as they were', async ({ page }) => {
