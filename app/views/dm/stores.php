@@ -51,6 +51,22 @@
       </div>
     </form>
 
+    <?php if ($elsewhere): ?>
+      <?php // Same system: the copy gets these shelves too. Another system: it gets the name, kind and note only (see dm_store_copy). ?>
+      <form class="card card-dashed form-row" method="post" action="<?= e(url('/dm/stores/' . $store['id'] . '/copy')) ?>">
+        <?= csrf_field() ?>
+        <label class="field mid">Copy to campaign
+          <select name="campaign_id">
+            <?php foreach ($elsewhere as $c): ?>
+              <option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?> (<?= e(ruleset_label($c['ruleset'])) ?><?= $c['ruleset'] === campaign_ruleset() ? ', shelves too' : ', empty shelves' ?>)</option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <p class="small muted grow" style="margin:0">This store stays as it is. The copy starts hidden. A campaign playing <?= e(ruleset_label(campaign_ruleset())) ?> gets these shelves too, with the same prices and stock; one playing another system gets the name, kind and note with empty shelves.</p>
+        <button class="btn btn-ghost" type="submit">Copy store</button>
+      </form>
+    <?php endif; ?>
+
     <form id="stock-form" class="card card-dashed form-row"
           hx-post="<?= e(url('/dm/stores/' . $store['id'] . '/stock')) ?>" hx-target="#stock-body" hx-swap="outerHTML">
       <?= render('partials/item_suggest', ['id' => 'stock-item', 'label' => 'Stock an item', 'hint' => '(new names are added to the catalog)', 'placeholder' => 'Search the catalog…']) ?>
