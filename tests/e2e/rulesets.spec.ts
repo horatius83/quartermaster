@@ -184,7 +184,8 @@ test.describe('a DM with campaigns in two systems', () => {
 
       await setSystem(page, '3.5e');
       await page.goto('/dm/catalog?q=Longsword');
-      await expect(rows(page)).toHaveCount(1);
+      // The SRD's cold iron longsword matches the search too, but there's only the one Longsword.
+      await expect(rowOf(page, 'Longsword')).toHaveCount(1);
       await expect(rowOf(page, 'Longsword').getByLabel('Weight')).toHaveValue('4');
     });
 

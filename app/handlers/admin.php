@@ -15,7 +15,12 @@ function admin_dashboard(): void
         $srd[$ruleset] = ['label' => ruleset_label($ruleset), 'sets' => []];
         $taken = srd_taken_keys($ruleset);
         foreach (array_keys(SRD_SETS) as $set) {
-            $srd[$ruleset]['sets'][$set] = srd_status($ruleset, $set, $taken) + ['stale' => srd_stale_count($ruleset, $set)];
+            $misfiled = srd_misfiled_items($ruleset, $set);
+            $srd[$ruleset]['sets'][$set] = srd_status($ruleset, $set, $taken) + [
+                'stale'       => srd_stale_count($ruleset, $set),
+                'moved'       => count($misfiled),
+                'moved_where' => $misfiled ? srd_refile_phrase($misfiled) : '',
+            ];
         }
     }
     page('admin/dashboard', [
@@ -45,10 +50,11 @@ function admin_import_srd(): void
         flash('There are no SRD items of that kind to load.', 'error');
         redirect('/admin');
     }
-    ['added' => $added, 'skipped' => $skipped, 'tidied' => $tidied] = import_srd($ruleset, $set);
+    ['added' => $added, 'skipped' => $skipped, 'tidied' => $tidied, 'moved' => $moved, 'moved_where' => $where] = import_srd($ruleset, $set);
     $noun = SRD_SETS[$set]['noun'] . ($added === 1 ? '' : 's');
     $tidy = $tidied ? ' ' . ($tidied === 1 ? '1 description' : "{$tidied} descriptions") . ' lost a sentence about a table the catalog doesn’t have.' : '';
-    flash("Added {$added} " . ruleset_label($ruleset) . " SRD {$noun}" . ($skipped ? " and skipped {$skipped} already in the catalog." : '.') . $tidy);
+    $refiled = $moved ? ' ' . ($moved === 1 ? '1 item' : "{$moved} items") . " moved {$where}." : '';
+    flash("Added {$added} " . ruleset_label($ruleset) . " SRD {$noun}" . ($skipped ? " and skipped {$skipped} already in the catalog." : '.') . $tidy . $refiled);
     redirect('/admin');
 }
 

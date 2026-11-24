@@ -2,6 +2,9 @@
 // Open Game Content from the System Reference Document, used under the Open Game License 1.0a: the whole of this
 // file is Open Game Content, and the license and copyright notice are in public/assets/srd-notices.txt.
 // Rows: name, category slug, weight (lb), price, tags, description. Weights and damage are for Medium versions.
+// The SRD's magic item tables also price some masterwork weapons and armor of special materials (adamantine, mithral,
+// darkwood, cold iron, alchemical silver, dragonhide) that it marks as nonmagical. They're here, after the other weapons
+// and armor, at the tables' full prices, with their base item's stats; masterwork takes 1 off armor's check penalty.
 declare(strict_types=1);
 
 return [
@@ -72,6 +75,10 @@ return [
     ['Repeating light crossbow', 'weapon', 6, '250 gp', ['exotic', 'ranged'], '1d8 piercing (Small: 1d6). Critical 19-20/×2. Range increment 80 ft. Holds 5 bolts. Reloads with a free action.'],
     ['Net', 'weapon', 6, '20 gp', ['exotic', 'ranged', 'thrown'], 'Ranged touch attack, 10 ft maximum range. Entangles the target. Escape Artist DC 20, or burst with Strength DC 25.'],
     ['Shuriken (5)', 'weapon', 0.5, '1 gp', ['exotic', 'ranged', 'thrown'], '1d2 piercing (Small: 1). Critical ×2. Range increment 10 ft. Treated as ammunition for drawing and for what happens after throwing.'],
+    ['Silver dagger, masterwork', 'weapon', 1, '322 gp', ['light', 'melee', 'simple', 'thrown'], '1d4 piercing or slashing (Small: 1d3), with -1 on damage rolls for alchemical silver (minimum 1). Critical 19-20/×2. Range increment 10 ft. This masterwork alchemical silver dagger is nonmagical. As a masterwork weapon, it has a +1 enhancement bonus on attack rolls.'],
+    ['Cold iron longsword, masterwork', 'weapon', 4, '330 gp', ['martial', 'melee', 'one-handed'], '1d8 slashing (Small: 1d6). Critical 19-20/×2. This nonmagical longsword is crafted out of cold iron. As a masterwork weapon, it has a +1 enhancement bonus on attack rolls.'],
+    ['Adamantine dagger', 'weapon', 1, '3002 gp', ['light', 'melee', 'simple', 'thrown'], '1d4 piercing or slashing (Small: 1d3). Critical 19-20/×2. Range increment 10 ft. This nonmagical dagger is made out of adamantine. As a masterwork weapon, it has a +1 enhancement bonus on attack rolls.'],
+    ['Adamantine battleaxe', 'weapon', 6, '3010 gp', ['martial', 'melee', 'one-handed'], '1d8 slashing (Small: 1d6). Critical ×3. This nonmagical axe is made out of adamantine. As a masterwork weapon, it has a +1 enhancement bonus on attack rolls.'],
     ['Padded armor', 'armor', 10, '5 gp', ['light'], '+1 AC. Max Dex +8. Armor check penalty 0. Arcane spell failure 5%. Speed 30 ft (Medium), 20 ft (Small).'],
     ['Leather armor', 'armor', 15, '10 gp', ['light'], '+2 AC. Max Dex +6. Armor check penalty 0. Arcane spell failure 10%. Speed 30 ft (Medium), 20 ft (Small).'],
     ['Studded leather armor', 'armor', 20, '25 gp', ['light'], '+3 AC. Max Dex +5. Armor check penalty -1. Arcane spell failure 15%. Speed 30 ft (Medium), 20 ft (Small).'],
@@ -93,6 +100,14 @@ return [
     ['Armor spikes', 'armor', 10, '50 gp', [], 'Added to armor: the cost and weight are on top of the armor’s. Deals 1d6 piercing (Small: 1d4) on a grapple or attack, critical ×2.'],
     ['Shield spikes', 'armor', 5, '10 gp', [], 'Added to a shield: the cost and weight are on top of the shield’s. A shield bash then deals piercing damage, as for a shield one size larger. Not for bucklers or tower shields.'],
     ['Locked gauntlet', 'armor', 5, '8 gp', [], 'Holds a weapon in place: +10 on rolls to keep from being disarmed. Attaching or removing a weapon is a full-round action. Cost is for one gauntlet.'],
+    ['Darkwood buckler', 'armor', 2.5, '205 gp', ['shield'], '+1 AC. Armor check penalty 0. Arcane spell failure 5%. This nonmagical light wooden shield is made out of darkwood. It has no enhancement bonus, but its construction material makes it lighter than a normal wooden shield.'],
+    ['Darkwood shield', 'armor', 5, '257 gp', ['shield'], '+2 AC. Armor check penalty 0. Arcane spell failure 15%. This nonmagical heavy wooden shield is made out of darkwood. It has no enhancement bonus, but its construction material makes it lighter than a normal wooden shield.'],
+    ['Mithral heavy shield', 'armor', 5, '1020 gp', ['shield'], '+2 AC. Armor check penalty 0. Arcane spell failure 5%. This heavy shield is made of mithral and thus is much lighter than a standard steel shield.'],
+    ['Mithral shirt', 'armor', 10, '1100 gp', ['light'], '+4 AC. Max Dex +6. Armor check penalty 0. Arcane spell failure 10%. Speed 30 ft (Medium), 20 ft (Small). This extremely light chain shirt is made of very fine mithral links.'],
+    ['Dragonhide plate', 'armor', 50, '3300 gp', ['heavy'], '+8 AC. Max Dex +1. Armor check penalty -5. Arcane spell failure 35%. Speed 20 ft (Medium), 15 ft (Small). This suit of full plate is made of dragonhide, rather than metal, so druids can wear it. It is otherwise identical to masterwork full plate.'],
+    ['Elven chain', 'armor', 20, '4150 gp', ['light'], '+5 AC. Max Dex +4. Armor check penalty -2. Arcane spell failure 20%. Speed 30 ft (Medium), 20 ft (Small). This extremely light chainmail is made of very fine mithral links. It is considered light armor.'],
+    ['Adamantine breastplate', 'armor', 30, '10200 gp', ['medium'], '+5 AC. Max Dex +3. Armor check penalty -3. Arcane spell failure 25%. Speed 20 ft (Medium), 15 ft (Small). This nonmagical breastplate is made of adamantine, giving its wearer damage reduction of 2/-.'],
+    ['Dwarven plate', 'armor', 50, '16500 gp', ['heavy'], '+8 AC. Max Dex +1. Armor check penalty -5. Arcane spell failure 35%. Speed 20 ft (Medium), 15 ft (Small). This full plate is made of adamantine, giving its wearer damage reduction of 3/-.'],
     ['Arrows (20)', 'ammunition', 3, '1 gp', [], 'Comes in a leather quiver.'],
     ['Crossbow bolts (10)', 'ammunition', 1, '1 gp', [], 'Comes in a wooden case.'],
     ['Repeating crossbow bolts (5)', 'ammunition', 1, '1 gp', [], 'Comes in a wooden case.'],

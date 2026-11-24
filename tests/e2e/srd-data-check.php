@@ -43,6 +43,11 @@ foreach (SRD_RULESETS as $ruleset) {
             if ($set === 'magic' && $slug !== 'magic') {
                 $problems[] = "{$where}: a magic item outside the Magic Item category";
             }
+            // The SRD prices some nonmagical items in its magic tables (a mithral shirt, an adamantine dagger); they
+            // belong with the gear.
+            if ($set === 'magic' && preg_match('/\bno aura\b|\(nonmagical\)/i', $description)) {
+                $problems[] = "{$where}: a nonmagical item among the magic items";
+            }
             if (!is_int($weight) && !is_float($weight) || $weight < 0) {
                 $problems[] = "{$where}: bad weight";
             }
@@ -71,6 +76,19 @@ foreach (SRD_RULESETS as $ruleset) {
                 if (mb_strlen($tag) > MAX_TAG_LENGTH) {
                     $problems[] = "{$where}: tag too long";
                 }
+            }
+        }
+    }
+    // Loading a set re-files the items an earlier version put in another set, so each must be in the set it names, in
+    // a category the catalog has, with tags in parse_tags()'s form.
+    foreach (array_keys(SRD_SETS) as $set) {
+        $names = array_flip(array_map(fn($row) => srd_name_key($row[0]), srd_items($ruleset, $set)));
+        foreach (srd_moved_rows($ruleset, $set) as $key => [$slug, $tags]) {
+            if (!isset($names[$key])) {
+                $problems[] = "{$ruleset} moved {$key}: not in the {$set} set";
+            }
+            if (!in_array($slug, $slugs, true) || $tags !== parse_tags(implode(',', $tags))) {
+                $problems[] = "{$ruleset} moved {$key}: bad old category or tags";
             }
         }
     }
