@@ -22,10 +22,18 @@
           <h3 class="card-title" id="srd-<?= e($ruleset) ?>"><?= e($label) ?> SRD</h3>
           <?php foreach ($system['sets'] as $set => $s):
             $missing = $s['total'] - $s['present'];
-            // Every name is there, but some descriptions still have a sentence an earlier version of the data had.
-            $tidy = $missing === 0 && $s['stale'] > 0;
+            // Every name is there, but an earlier version of the data left some descriptions with a sentence it had,
+            // or some items filed with another set (the nonmagical items the 3.5e magic tables price).
+            $tidy = $missing === 0 && ($s['stale'] > 0 || $s['moved'] > 0);
             $loaded = $missing === 0 && !$tidy;
             $descriptions = $s['stale'] === 1 ? '1 description' : $s['stale'] . ' descriptions';
+            $one = $s['moved'] === 1;
+            $misfiled = $one ? '1 item' : $s['moved'] . ' items';
+            // What loading tidies up, for its confirmation.
+            $tidyUp = array_filter([
+                $s['stale'] ? 'take the sentence about a missing table out of ' . $descriptions : '',
+                $s['moved'] ? "move {$misfiled} {$s['moved_where']}" : '',
+            ]);
             $id = 'srd-' . $ruleset . '-' . $set;
             $names = SRD_SETS[$set];
             $noun = $names['noun'] . 's';
@@ -38,8 +46,10 @@
               <p class="muted small" style="margin:0">
                 <?php if ($loaded): ?>
                   All <?= $s['total'] ?> <?= $noun ?> are already in the <?= e($label) ?> catalog. There’s nothing to add.
-                <?php elseif ($tidy): ?>
+                <?php elseif ($tidy && !$s['moved']): ?>
                   All <?= $s['total'] ?> <?= $noun ?> are in the <?= e($label) ?> catalog, but <?= $descriptions ?> still <?= $s['stale'] === 1 ? 'mentions' : 'mention' ?> a table the catalog doesn’t have. Loading takes that sentence out and changes nothing else.
+                <?php elseif ($tidy): ?>
+                  All <?= $s['total'] ?> <?= $noun ?> are in the <?= e($label) ?> catalog, but <?= $misfiled ?> an earlier version of the data loaded <?= $one ? 'is' : 'are' ?> still in the wrong category. Loading moves <?= $one ? 'it' : 'them' ?> <?= e($s['moved_where']) ?>, with <?= $one ? 'its' : 'their' ?> weight and tags, and keeps <?= $one ? 'its' : 'their' ?> price.<?php if ($s['stale']): ?> It also takes a sentence about a table the catalog doesn’t have out of <?= $descriptions ?>.<?php endif; ?>
                 <?php elseif ($s['present']): ?>
                   <?= $s['present'] ?> of <?= $s['total'] ?> <?= $noun ?> are in the <?= e($label) ?> catalog. Loading adds the other <?= $missing ?>, which were deleted, renamed or never loaded.
                 <?php else: ?>
@@ -48,8 +58,11 @@
                 <?php if ($s['stale'] && !$tidy): ?>
                   It also takes a sentence about a table the catalog doesn’t have out of <?= $descriptions ?>.
                 <?php endif; ?>
+                <?php if ($s['moved'] && !$tidy): ?>
+                  It also moves <?= $misfiled ?> an earlier version of the data put in the wrong category <?= e($s['moved_where']) ?>.
+                <?php endif; ?>
               </p>
-              <form method="post" action="<?= e(url('/admin/srd')) ?>"<?php if ($tidy): ?> hx-confirm="Take the sentence about a missing table out of <?= $descriptions ?> in the catalog every DM’s <?= e($label) ?> campaigns share?"<?php elseif (!$loaded): ?> hx-confirm="Add <?= $missing ?> <?= e($label) ?> SRD <?= e($names['noun'] . ($missing === 1 ? '' : 's')) ?> to the catalog every DM’s <?= e($label) ?> campaigns share?"<?php endif; ?>>
+              <form method="post" action="<?= e(url('/admin/srd')) ?>"<?php if ($tidy): ?> hx-confirm="<?= e(ucfirst(implode(' and ', $tidyUp))) ?> in the catalog every DM’s <?= e($label) ?> campaigns share?"<?php elseif (!$loaded): ?> hx-confirm="Add <?= $missing ?> <?= e($label) ?> SRD <?= e($names['noun'] . ($missing === 1 ? '' : 's')) ?> to the catalog every DM’s <?= e($label) ?> campaigns share<?= $tidyUp ? e(', and ' . implode(' and ', $tidyUp)) : '' ?>?"<?php endif; ?>>
                 <?= csrf_field() ?>
                 <input type="hidden" name="edition" value="<?= e($ruleset) ?>">
                 <input type="hidden" name="set" value="<?= e($set) ?>">

@@ -206,6 +206,25 @@ $check('the rest of the description stays', 'Cracked neck.', q_val("SELECT descr
 $check('a sentence differing in case is left alone', 'Loud.', substr((string)q_val("SELECT description FROM items WHERE name = 'Drum' AND ruleset = '5e'"), -5));
 $check('nothing is left to tidy', 0, srd_stale_count('5e', 'gear'));
 
+// Loading re-files a nonmagical item an earlier version of the 3.5e data loaded as a magic item.
+[$oldSlug, $oldTags, $oldDescription] = srd_moved_rows('3.5e', 'gear')['mithral shirt'];
+$shirt = (int)q_val("SELECT id FROM items WHERE name = 'Mithral shirt' AND ruleset = '3.5e'");
+q('UPDATE items SET category_id = ?, weight = 0, description = ? WHERE id = ?', [array_column(categories(), 'id', 'slug')[$oldSlug], $oldDescription, $shirt]);
+set_item_tags($shirt, [...$oldTags, 'sela']);
+// A magic item of the DM's own under a moved row's name, without the SRD table's tags, is theirs.
+$chain = (int)q_val("SELECT id FROM items WHERE name = 'Elven chain' AND ruleset = '3.5e'");
+q('UPDATE items SET category_id = ? WHERE id = ?', [array_column(categories(), 'id', 'slug')['magic'], $chain]);
+set_item_tags($chain, ['heirloom']);
+$check('a misfiled item is found', 1, count(srd_misfiled_items('3.5e', 'gear')));
+$check('loading moves it', ['moved' => 1, 'moved_where' => 'from Magic Item to Armor'], array_intersect_key(import_srd('3.5e', 'gear'), ['moved' => 0, 'moved_where' => 0]));
+$check('the DM’s own is left alone', 'magic', category_by_id((int)q_val('SELECT category_id FROM items WHERE id = ?', [$chain]))['slug']);
+$moved = q_one('SELECT c.slug, i.weight, i.description FROM items i JOIN categories c ON c.id = i.category_id WHERE i.id = ?', [$shirt]);
+$check('it is armor again', 'armor', $moved['slug']);
+$check('with its weight', 10.0, (float)$moved['weight']);
+$check('and the new description', '+4 AC.', substr((string)$moved['description'], 0, 6));
+$check('the old tags are swapped for the new, keeping the DM’s', ['light', 'sela'], with_item_tags([['id' => $shirt]])[0]['tags']);
+$check('nothing is left to move', 0, count(srd_misfiled_items('3.5e', 'gear')));
+
 // Setting a campaign's system moves what it holds, using updates MySQL is fussier about than SQLite.
 $older = q_one("SELECT * FROM campaigns WHERE name = 'Older campaign'");
 $other = create_campaign('Other 5e campaign', $owner);

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, loadSrd, signIn, signInAsAdmin, signInAsDm, toasts, BRYN } from './fixtures';
-import { resetDatabase } from './php';
+import { dropSrdItem, misfileSrdItems, readMovedSrdItems, resetDatabase } from './php';
 
 const userRow = (page: Page, username: string) =>
   page.getByRole('table', { name: 'All logins' }).getByRole('row').filter({ has: page.getByText(username, { exact: true }) });
@@ -112,6 +112,48 @@ test('loading takes a sentence about a missing table out of descriptions an earl
   await signInAsDm(page);
   await page.goto('/dm/catalog?q=Lute');
   await expect(lute).toHaveValue('Bryn’s, with a cracked neck.');
+});
+
+test('loading the 3.5e gear moves the nonmagical items an earlier version filed as magic, keeping the DM’s changes', async ({ page }) => {
+  await loadSrd(page, '3.5e');
+  // As the 3.5e magic items used to load them, with a DM's edits to Elven chain, the Darkwood shield moved to Gear,
+  // and a Dwarven plate of the DM's own in Magic Item.
+  misfileSrdItems();
+  const before = readMovedSrdItems();
+
+  await signInAsAdmin(page);
+  const gear = page.getByRole('article', { name: '3.5e SRD' }).getByRole('region', { name: 'Weapons, armor and gear' });
+  const form = gear.locator('form');
+  await expect(gear).toContainText('Needs tidying');
+  await expect(gear).toContainText('but 10 items an earlier version of the data loaded are still in the wrong category. Loading moves them from Magic Item to Weapon and Armor');
+  await expect(form).toHaveAttribute('hx-confirm', 'Move 10 items from Magic Item to Weapon and Armor in the catalog every DM’s 3.5e campaigns share?');
+
+  // With an item missing too, the confirmation names both.
+  dropSrdItem('Gauntlet');
+  await page.reload();
+  await expect(gear).toContainText('Partly loaded');
+  await expect(gear).toContainText('It also moves 10 items an earlier version of the data put in the wrong category from Magic Item to Weapon and Armor.');
+  await expect(form).toHaveAttribute('hx-confirm', 'Add 1 3.5e SRD gear item to the catalog every DM’s 3.5e campaigns share, and move 10 items from Magic Item to Weapon and Armor?');
+  await gear.getByRole('button', { name: 'Load 3.5e SRD gear' }).click();
+  await expect(toasts(page)).toContainText('Added 1 3.5e SRD gear item and skipped');
+  await expect(toasts(page)).toContainText('10 items moved from Magic Item to Weapon and Armor.');
+  await expect(gear).toContainText('Loaded');
+  await expect(gear.getByRole('button', { name: 'Load 3.5e SRD gear' })).toBeDisabled();
+
+  const after = readMovedSrdItems();
+  // An untouched one is just as loading the gear would have made it.
+  expect(after['Mithral shirt']).toEqual({ category: 'armor', weight: 10, tags: ['light'], description: expect.stringMatching(/^\+4 AC\. Max Dex \+6\. /) });
+  expect(after['Cold iron longsword, masterwork']).toMatchObject({ category: 'weapon', weight: 4, tags: ['martial', 'melee', 'one-handed'] });
+  // A tag the old row had that the new one has too is kept.
+  expect(after['Adamantine breastplate']).toMatchObject({ category: 'armor', weight: 30, tags: ['medium'] });
+  // The DM's description, weight and tag stay; only the old row's tags go.
+  expect(after['Elven chain']).toEqual({ category: 'armor', weight: 18, tags: ['light', 'sela'], description: 'Sela’s, from the elves of Frostgate.' });
+  // One the DM filed elsewhere is theirs, and so is one of their own without the SRD table's tags.
+  expect(after['Darkwood shield']).toEqual(before['Darkwood shield']);
+  expect(after['Dwarven plate']).toEqual(before['Dwarven plate']);
+  expect(after['Dwarven plate'].category).toBe('magic');
+  // Alchemical silver's damage penalty is in its stats.
+  expect(after['Silver dagger, masterwork'].description).toContain('with -1 on damage rolls for alchemical silver (minimum 1)');
 });
 
 test('the admin can see every login', async ({ page }) => {

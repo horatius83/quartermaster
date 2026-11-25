@@ -74,6 +74,28 @@ export function checkSrdData(): { problems: string[] } {
   return JSON.parse(out.toString());
 }
 
+/** A moved SRD item as tests/e2e/misfiled-srd.php reads it back. */
+export type MovedItem = { category: string; weight: number; tags: string[]; description: string | null };
+
+/** Put the loaded 3.5e gear's nonmagical items back as magic items, as an earlier version of the data loaded them. */
+export function misfileSrdItems(): void {
+  const [cmd, ...args] = phpCommand();
+  execFileSync(cmd, [...args, 'tests/e2e/misfiled-srd.php', 'misfile'], { cwd: ROOT, env: { ...process.env, ...phpEnv() }, stdio: 'pipe' });
+}
+
+/** Delete one 3.5e catalog item, so its SRD set is only partly loaded. */
+export function dropSrdItem(name: string): void {
+  const [cmd, ...args] = phpCommand();
+  execFileSync(cmd, [...args, 'tests/e2e/misfiled-srd.php', 'drop', name], { cwd: ROOT, env: { ...process.env, ...phpEnv() }, stdio: 'pipe' });
+}
+
+/** Those items as the 3.5e catalog has them now, by name. */
+export function readMovedSrdItems(): Record<string, MovedItem> {
+  const [cmd, ...args] = phpCommand();
+  const out = execFileSync(cmd, [...args, 'tests/e2e/misfiled-srd.php', 'read'], { cwd: ROOT, env: { ...process.env, ...phpEnv() }, stdio: 'pipe' });
+  return JSON.parse(out.toString());
+}
+
 /** Run tests/e2e/upgrade-rulesets-check.php and return what upgrade 006 left behind. */
 export function upgradeToRulesets(): unknown {
   const [cmd, ...args] = phpCommand();

@@ -1365,6 +1365,99 @@ function srd_stale_count(string $ruleset, string $set): int
     return (int)q_val("SELECT COUNT(*) FROM items WHERE ruleset = ? AND description <> {$sql}", [$ruleset, ...$params]);
 }
 
+/**
+ * The rows an earlier version of a system's data had in another set and that are in $set now, by name key:
+ * [old category slug, old tags, old description] (see app/data/srd-<system>-moved.php).
+ */
+function srd_moved_rows(string $ruleset, string $set): array
+{
+    $file = APP_DIR . "/data/srd-{$ruleset}-moved.php";
+    $rows = [];
+    foreach (is_file($file) ? ((require $file)[$set] ?? []) : [] as $name => $row) {
+        $rows[srd_name_key($name)] = $row;
+    }
+    return $rows;
+}
+
+/**
+ * A system's catalog items that an earlier version of a set's data loaded into another set and that are still there,
+ * with their tags, the category they're in ('slug') and the one the set's row gives them now ('to_slug'). An item is
+ * only taken for the old row's if it's still in that row's category and still has every tag that row gave it (the SRD
+ * table tags, minor/medium/major, mark it): one the DM put in another category, or made themselves under the same name,
+ * is theirs and is left alone. A moved row the set no longer has is ignored.
+ */
+function srd_misfiled_items(string $ruleset, string $set): array
+{
+    if (!$moved = srd_moved_rows($ruleset, $set)) {
+        return [];
+    }
+    $now = [];
+    foreach (srd_items($ruleset, $set) as $row) {
+        $now[srd_name_key($row[0])] = $row[1];
+    }
+    $slugs = array_values(array_unique(array_column($moved, 0)));
+    $items = q_all(
+        'SELECT i.id, i.name, i.weight, i.description, c.slug FROM items i JOIN categories c ON c.id = i.category_id
+          WHERE i.ruleset = ? AND c.slug IN (' . implode(',', array_fill(0, count($slugs), '?')) . ')',
+        [$ruleset, ...$slugs]
+    );
+    $candidates = array_filter($items, function ($item) use ($moved, $now) {
+        $key = srd_name_key($item['name']);
+        return isset($now[$key]) && ($moved[$key][0] ?? null) === $item['slug'];
+    });
+    $misfiled = [];
+    foreach (with_item_tags(array_values($candidates)) as $item) {
+        $key = srd_name_key($item['name']);
+        if (!array_diff($moved[$key][1], $item['tags'])) {
+            $misfiled[] = $item + ['to_slug' => $now[$key]];
+        }
+    }
+    return $misfiled;
+}
+
+/**
+ * Where misfiled items (srd_misfiled_items()) are and where they go, by category name in the catalog's order:
+ * "from Magic Item to Weapon and Armor".
+ */
+function srd_refile_phrase(array $items): string
+{
+    $names = array_column(categories(), 'name', 'slug');
+    $list = function (array $slugs) use ($names): string {
+        $in = array_values(array_filter($names, fn($slug) => in_array($slug, $slugs, true), ARRAY_FILTER_USE_KEY));
+        $last = array_pop($in);
+        return $in ? implode(', ', $in) . ' and ' . $last : (string)$last;
+    };
+    return 'from ' . $list(array_column($items, 'slug')) . ' to ' . $list(array_column($items, 'to_slug'));
+}
+
+/**
+ * Move a set's misfiled items (srd_misfiled_items()) to the category its rows give them now, and return them. Each
+ * takes the row's weight if it has none (the old rows had none), swaps the tags the old row gave it for the new row's
+ * (keeping the DM's own), and takes the new description if it still has the old one. Its price and name stay.
+ */
+function refile_srd_items(string $ruleset, string $set, array $rows, array $categoryIds): array
+{
+    $moved = srd_moved_rows($ruleset, $set);
+    $byKey = [];
+    foreach ($rows as $row) {
+        $byKey[srd_name_key($row[0])] = $row;
+    }
+    $refiled = srd_misfiled_items($ruleset, $set);
+    foreach ($refiled as $item) {
+        $key = srd_name_key($item['name']);
+        [, , $weight, , $tags, $description] = $byKey[$key];
+        [, $oldTags, $oldDescription] = $moved[$key];
+        q('UPDATE items SET category_id = ?, weight = ?, description = ? WHERE id = ?', [
+            (int)$categoryIds[$item['to_slug']],
+            (float)$item['weight'] > 0 ? (float)$item['weight'] : (float)$weight,
+            ($item['description'] ?? '') === $oldDescription ? $description : $item['description'],
+            (int)$item['id'],
+        ]);
+        set_item_tags((int)$item['id'], parse_tags(implode(',', [...array_diff($item['tags'], $oldTags), ...$tags])));
+    }
+    return $refiled;
+}
+
 /** The name keys a system's catalog already has, to compare SRD rows against. */
 function srd_taken_keys(string $ruleset): array
 {
@@ -1385,8 +1478,10 @@ function srd_status(string $ruleset, string $set = 'gear', ?array $taken = null)
 
 /**
  * Add one set of a system's SRD items to its catalog: ['added' => how many were, 'skipped' => how many it already
- * had, 'tidied' => how many descriptions lost a stale sentence]. A name that system already has is skipped, so a DM's
- * own prices and descriptions are never overwritten; only the sentences in SRD_STALE_TEXT are taken out of them.
+ * had, 'tidied' => how many descriptions lost a stale sentence, 'moved' => how many items loaded with another set
+ * were re-filed into this one, 'moved_where' => srd_refile_phrase() for them]. A name that system already has is skipped, so a DM's own prices and descriptions are
+ * never overwritten; only the sentences in SRD_STALE_TEXT are taken out of them, and refile_srd_items() moves the
+ * items an earlier version of the data put in the wrong set.
  */
 function import_srd(string $ruleset, string $set = 'gear'): array
 {
@@ -1420,6 +1515,10 @@ function import_srd(string $ruleset, string $set = 'gear'): array
                 [...$params, $ruleset, ...$params]
             )->rowCount();
         }
-        return ['added' => $added, 'skipped' => count($rows) - $added, 'tidied' => $tidied];
+        $refiled = refile_srd_items($ruleset, $set, $rows, $categoryIds);
+        return [
+            'added' => $added, 'skipped' => count($rows) - $added, 'tidied' => $tidied,
+            'moved' => count($refiled), 'moved_where' => $refiled ? srd_refile_phrase($refiled) : '',
+        ];
     });
 }
