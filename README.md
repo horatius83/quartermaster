@@ -135,6 +135,7 @@ Before this version, saving a shelf line or catalog row priced at 1,000 gp or mo
 3. **Upload the code.** Use either option.
    - **Git (simplest):** in hPanel use *Advanced → Git* to deploy this repository into `public_html`. The root `.htaccess` sends every request into `public/`, so `app/` and `.git` are never served.
    - **Manual (tidiest):** put the `app/` folder in your home directory, next to `public_html`, and put the *contents* of `public/` into `public_html`.
+   - **On each release:** `.github/workflows/deploy.yml` uploads `app/` and `public/` over FTPS whenever a GitHub release is published, deploying the release's tag. It can also be run by hand from the *Actions* tab, with a dry run that only lists what would change. Set the FTP host, user and folders at the top of the workflow, and the password as the `FTP_PASSWORD` repository secret. It never uploads or deletes `app/config.php`.
 4. **Configure.** In *File Manager*, copy `app/config.example.php` to `app/config.php` and fill in the database details. `config.php` is git-ignored, so redeploys won't overwrite it.
 5. **PHP version.** Use PHP 8.1 or newer under *Advanced → PHP Configuration*. Make sure `pdo_mysql` is enabled; it is by default.
 6. **Create the DM account.** Visit your site. The first visit goes to `/setup`, where you create the DM login and name your first campaign. After that, add players under *Party & logins*, and use *Create the admin account* in the sidebar to make the admin login that adds more DMs.

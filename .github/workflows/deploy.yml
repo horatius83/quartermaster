@@ -1,4 +1,6 @@
-# Uploads app/ and public/ to Hostinger over FTP. Runs only when started by hand from the Actions tab.
+# Uploads app/ and public/ to Hostinger over FTP. Runs whenever a release is published (pre-releases
+# included; drafts wait until they're published), deploying the release's tag, and can also be started by
+# hand from the Actions tab, deploying the branch picked there.
 #
 # Needs one secret under the repository's Settings > Secrets and variables > Actions:
 #   - FTP_PASSWORD: the password for the FTP account below.
@@ -9,6 +11,9 @@
 name: Deploy to Hostinger
 
 on:
+  release:
+    types: [published]
+  # A release run has no inputs, so inputs.dry_run is empty there and it uploads for real.
   workflow_dispatch:
     inputs:
       dry_run:
@@ -16,7 +21,7 @@ on:
         type: boolean
         default: false
 
-# Let a running upload finish, then deploy the newest commit, so two uploads never overlap.
+# Let a running upload finish, then deploy the newest release or commit, so two uploads never overlap.
 concurrency:
   group: deploy-hostinger
   cancel-in-progress: false
@@ -37,6 +42,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # For a release this is the release's tag (github.ref is refs/tags/<tag>), not the tip of main.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # app/ goes first so that new public files never run against old application code.
